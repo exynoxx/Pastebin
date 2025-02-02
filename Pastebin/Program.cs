@@ -58,7 +58,9 @@ memoryStream.Position = 0;
 
 await fs.UploadFromStreamAsync("test.txt", memoryStream);*/
 
+/*
 const string uri = "http://localhost:5000/swagger/index.html";
 Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+*/
 
 app.Run();

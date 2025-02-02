@@ -6,7 +6,7 @@ using MongoDB.Driver.GridFS;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var mongoClient = new MongoClient("mongodb://admin:adminpass@localhost:27017");
+var mongoClient = new MongoClient("mongodb://admin:adminpass@mongodb:27017");
 var mongoDatabase = mongoClient.GetDatabase("FileStorageDB");
 
 builder.Services.AddSingleton(mongoDatabase);
@@ -63,4 +63,5 @@ const string uri = "http://localhost:5000/swagger/index.html";
 Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
 */
 
+//app.Urls.Add("http://localhost:5000");
 app.Run();

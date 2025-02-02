@@ -11,20 +11,24 @@ tasks:
       - docker build -f ui/Dockerfile -t pastebin-ui .
     silent: false
 
+  setup-networking:
+    cmds:
+      - docker network create net
   mongo:
     cmds:
       - |-
         docker run -d --name mongodb \
+        --network net \
         -p 27017:27017 \
         -v mongo_data:/data/db \
         -e MONGO_INITDB_ROOT_USERNAME=admin \
         -e MONGO_INITDB_ROOT_PASSWORD=adminpass \
-        mongo:latest
+        mongo:latest 
     silent: false
 
   be:
     cmds:
-      - docker run -d -p 5000:5000 pastebin
+      - docker run -d -p 5000:8080 --network net pastebin 
     silent: false
 
   fe:
@@ -38,9 +42,17 @@ tasks:
       - task: build-fe
       - task: be
       - task: fe
+      - task: setup-networking
       - task: mongo
 
     silent: false
+
+  rebuild:
+    cmds:
+      - task: build-be
+      - task: build-fe
+      - task: be
+      - task: fe
 
   rerun:
     cmds:

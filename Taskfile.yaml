@@ -13,17 +13,22 @@ tasks:
 
   setup-networking:
     cmds:
-      - docker network create net
+      - |-
+        if ! docker network inspect net >/dev/null 2>&1; then
+          docker network create net
+        fi
   mongo:
     cmds:
       - |-
-        docker run -d --name mongodb \
-        --network net \
-        -p 27017:27017 \
-        -v mongo_data:/data/db \
-        -e MONGO_INITDB_ROOT_USERNAME=admin \
-        -e MONGO_INITDB_ROOT_PASSWORD=adminpass \
-        mongo:latest 
+        if ! docker ps -a --format '{{.Names}}' | grep -q '^mongodb$'; then
+          docker run -d --name mongodb \
+          --network net \
+          -p 27017:27017 \
+          -v mongo_data:/data/db \
+          -e MONGO_INITDB_ROOT_USERNAME=admin \
+          -e MONGO_INITDB_ROOT_PASSWORD=adminpass \
+          mongo:latest
+        fi
     silent: false
 
   be:

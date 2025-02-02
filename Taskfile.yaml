@@ -1,0 +1,31 @@
+version: '3'
+
+tasks:
+  start-mongo:
+    desc: Start MongoDB container
+    cmds:
+      - docker run --name mongo -d -p 27017:27017 mongo
+    silent: false
+
+  start-be:
+    desc: Start backend container
+    deps: [start-mongo]
+    cmds:
+      - echo "Waiting for MongoDB to be ready..."
+      - until docker exec mongo mongo --eval "db.runCommand({ ping: 1 })" > /dev/null 2>&1; do sleep 1; done
+      - docker run --name backend -d -p 3000:3000 my-backend-image
+    silent: false
+
+  start-fe:
+    desc: Start frontend server
+    deps: [start-be]
+    cmds:
+      - npm run server
+    silent: false
+
+  start-all:
+    desc: Start MongoDB, backend, and frontend
+    cmds:
+      - task: start-mongo
+      - task: start-be
+      - task: start-fe

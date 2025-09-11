@@ -50,4 +50,3 @@ pastebin/
 
 - The current CORS policy (`AllowAll`) allows requests from any origin, which is insecure for production. Update `Program.cs` to specify allowed origins (e.g., `http://localhost:3000` or your production domain).
 - Consider adding authentication and HTTPS for production deployments.
-This project is licensed under the MIT License.

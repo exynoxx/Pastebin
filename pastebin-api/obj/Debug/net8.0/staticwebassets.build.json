@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "ihVf07s7raL1LVHf1pssHOofy258xKWiX3EAYuiH0g0=",
+  "Source": "pastebin.api",
+  "BasePath": "_content/pastebin.api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}

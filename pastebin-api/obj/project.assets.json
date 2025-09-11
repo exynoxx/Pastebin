@@ -13,11 +13,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/nicholas/Dokumenter/Pastebin/Pastebin/pastebin-api/pastebin.api.csproj",
+      "projectUniqueName": "/home/nicholas/Dokumenter/git/Pastebin/pastebin-api/pastebin.api.csproj",
       "projectName": "pastebin.api",
-      "projectPath": "/home/nicholas/Dokumenter/Pastebin/Pastebin/pastebin-api/pastebin.api.csproj",
+      "projectPath": "/home/nicholas/Dokumenter/git/Pastebin/pastebin-api/pastebin.api.csproj",
       "packagesPath": "/home/nicholas/.nuget/packages/",
-      "outputPath": "/home/nicholas/Dokumenter/Pastebin/Pastebin/pastebin-api/obj/",
+      "outputPath": "/home/nicholas/Dokumenter/git/Pastebin/pastebin-api/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/home/nicholas/.nuget/NuGet/NuGet.Config"

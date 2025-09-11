@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("pastebin.api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5a1d35bf8fd3d6b8cfa14b8bcc6c785b0944f19b")]
 [assembly: System.Reflection.AssemblyProductAttribute("pastebin.api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("pastebin.api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

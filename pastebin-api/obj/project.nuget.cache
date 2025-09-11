@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "YOt+69SZox0=",
+  "dgSpecHash": "0GPWn8Bsqy4=",
   "success": true,
-  "projectFilePath": "/home/nicholas/Dokumenter/Pastebin/Pastebin/pastebin-api/pastebin.api.csproj",
+  "projectFilePath": "/home/nicholas/Dokumenter/git/Pastebin/pastebin-api/pastebin.api.csproj",
   "expectedPackageFiles": [
     "/home/nicholas/.nuget/packages/microsoft.netcore.app.ref/8.0.14/microsoft.netcore.app.ref.8.0.14.nupkg.sha512",
     "/home/nicholas/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.14/microsoft.aspnetcore.app.ref.8.0.14.nupkg.sha512",

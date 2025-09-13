@@ -1,17 +1,13 @@
-version: '3.8'
-
 services:
   pastebin-api:
     build:
       context: ./pastebin-api
       dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-    volumes:
-      - pastebin-api-data:/app/data
     networks:
       - pastebin-network
 
@@ -19,16 +15,48 @@ services:
     build:
       context: ./pastebin-frontend
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
-      - API_URL=http://pastebin-api:8080
     networks:
       - pastebin-network
 
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password123
+      - MONGO_INITDB_DATABASE=pastebin
+    volumes:
+      - mongo-data:/data/db
+    depends_on:
+      - pastebin-api
+      - pastebin-frontend
+    networks:
+      - pastebin-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: pastebin-nginx
+    ports:
+      - "80:80"
+      - "443:443"  # if you plan to add SSL later
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - pastebin-api
+      - pastebin-frontend
+    networks:
+      - pastebin-network
+    restart: unless-stopped
+
 volumes:
-  pastebin-api-data:
+  mongo-data:
 
 networks:
   pastebin-network:

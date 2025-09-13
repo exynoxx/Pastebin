@@ -1,3 +1,4 @@
+using MongoDB.Driver;
 using pastebin.api.services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +15,8 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<IPasteService, PasteService>();
+var mongo = new MongoClient("mongodb://admin:password123@mongo:27017/pastebin?authSource=admin");
+builder.Services.AddSingleton<IMongoDatabase>(_ => mongo.GetDatabase("pastebin"));
 
 var app = builder.Build();
 

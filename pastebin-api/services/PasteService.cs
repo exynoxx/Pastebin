@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using MongoDB.Driver;
 using pastebin.api.models;
 
 namespace pastebin.api.services;
@@ -11,9 +12,14 @@ public interface IPasteService
 }
 public class PasteService : IPasteService
 {
-    private readonly ConcurrentDictionary<string, Paste> _pastes = new();
+    private readonly IMongoDatabase _database;
 
-    public Task<Paste> CreatePasteAsync(CreatePasteRequest request)
+    public PasteService(IMongoDatabase database)
+    {
+        this._database = database;
+    }
+
+    public async Task<Paste> CreatePasteAsync(CreatePasteRequest request)
     {
         var id = GenerateId();
         var paste = new Paste
@@ -22,24 +28,25 @@ public class PasteService : IPasteService
             Title = string.IsNullOrWhiteSpace(request.Title) ? "Untitled" : request.Title.Trim(),
             Content = request.Content ?? string.Empty
         };
-
-        _pastes[id] = paste;
-        return Task.FromResult(paste);
+        
+        await _database.GetCollection<Paste>("pastes").InsertOneAsync(paste);
+        return paste;
     }
 
-    public Task<Paste?> GetPasteAsync(string id)
+    public async Task<Paste?> GetPasteAsync(string id)
     {
-        _pastes.TryGetValue(id, out var paste);
-        return Task.FromResult(paste);
+        return await _database
+            .GetCollection<Paste>("pastes").Find(x=>x.Id == id)
+            .SingleOrDefaultAsync();
     }
 
-    public Task<List<Paste>> GetRecentPastesAsync(int limit = 10)
+    public async Task<List<Paste>> GetRecentPastesAsync(int limit = 50)
     {
-        var recent = _pastes.Values
-            .OrderByDescending(p => p.CreatedAt)
-            .Take(Math.Min(limit, 50))
-            .ToList();
-        return Task.FromResult(recent);
+        return await _database.GetCollection<Paste>("pastes")
+            .Find(_ => true)
+            .SortByDescending(p => p.CreatedAt)
+            .Limit(limit)
+            .ToListAsync();
     }
 
     private static string GenerateId()

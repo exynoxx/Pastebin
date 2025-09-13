@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 
-const API_BASE = 'http://0.0.0.0:8080/api';
+const API_BASE = '/api';
 
 // Configure axios defaults
 axios.defaults.baseURL = API_BASE;

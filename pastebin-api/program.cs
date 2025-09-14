@@ -15,6 +15,8 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<IPasteService, PasteService>();
+builder.Services.AddSingleton<IFileUploadService, FileUploadService>();
+
 var mongo = new MongoClient("mongodb://admin:password123@mongo:27017/pastebin?authSource=admin");
 builder.Services.AddSingleton<IMongoDatabase>(_ => mongo.GetDatabase("pastebin"));
 

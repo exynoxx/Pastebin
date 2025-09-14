@@ -1,0 +1,27 @@
+services:
+  pastebin-api:
+    build:
+      context: ./pastebin-api
+      dockerfile: Dockerfile
+    expose:
+      - "8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    networks:
+      - pastebin-network
+
+  pastebin-frontend:
+    build:
+      context: ./pastebin-frontend
+      dockerfile: Dockerfile
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - pastebin-network
+
+networks:
+  pastebin-network:
+    driver: bridge

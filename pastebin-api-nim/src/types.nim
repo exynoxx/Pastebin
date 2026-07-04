@@ -42,10 +42,11 @@ type
         blobId*: string        ## internal. Never emitted in JSON.
 
     # Result of resolving a downloadable blob/inline paste (mirrors FileDownloadData.cs).
-    # Either backed by an on-disk blob (blobPath set) or by in-memory bytes (inlineData).
+    # Either backed by an on-disk blob (dkBlob) or by in-memory bytes (dkInline).
+    DownloadKind* = enum dkBlob, dkInline
     DownloadData* = object
-        fromBlob*: bool
-        blobPath*: string      ## valid when fromBlob
-        inlineData*: string    ## valid when not fromBlob
         contentType*: string
         fileName*: string
+        case kind*: DownloadKind
+        of dkBlob:   blobPath*: string   ## on-disk blob path
+        of dkInline: inlineData*: string ## in-memory bytes

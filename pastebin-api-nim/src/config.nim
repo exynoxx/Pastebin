@@ -47,8 +47,8 @@ proc getLong(key: string, fallback: int64): int64 =
     ## Mirrors program.cs GetLong: parse or fall back. Invariant/base-10.
     let v = getEnv(key)
     if v.len == 0: return fallback
-    try: result = parseBiggestInt(v.strip())
-    except ValueError: result = fallback
+    try: parseBiggestInt(v.strip())
+    except ValueError: fallback
 
 proc getInt(key: string, fallback: int): int =
     int(getLong(key, fallback.int64))

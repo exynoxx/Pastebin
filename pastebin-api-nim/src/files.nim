@@ -4,7 +4,7 @@
 ## Folder uploads are zipped: this path stages entry contents in memory via zippy (bounded by
 ## the 100 MB per-IP quota) — a candidate for a streaming zip writer later. Marked LIMITATION.
 
-import std/[options, strutils, tables]
+import std/[options, strutils, tables, strformat]
 import config, types, db, blobstore, quota, ntfy, timeutil, apperrors, multipart
 import zippy/ziparchives
 
@@ -16,7 +16,7 @@ proc persist(f: StoredFile, ownerIp: string) =
     insertFile(f, ownerIp)
     notifyFileUploaded(f)
 
-proc normalizeVisibility(v: string): string =
+func normalizeVisibility(v: string): string =
     ## "private" stays private (unlisted); anything else defaults to public. Mirrors createPaste.
     if v == "private": "private" else: "public"
 
@@ -24,8 +24,7 @@ proc uploadFile*(cfg: AppConfig, entry: MultipartEntry, ownerIp, visibility: str
     ## entry is a file part whose bytes are on disk at entry.dataFilePath.
     if entry.size > cfg.maxRequestBytes:
         raise newException(PayloadTooLargeError,
-            "File size exceeds the maximum allowed size of " &
-            $(cfg.maxRequestBytes div (1024 * 1024)) & "MB")
+            &"File size exceeds the maximum allowed size of {cfg.maxRequestBytes div (1024*1024)}MB")
 
     ensureWithinQuota(ownerIp, entry.size, cfg.maxStorageBytesPerIp)
 
@@ -40,7 +39,7 @@ proc uploadFile*(cfg: AppConfig, entry: MultipartEntry, ownerIp, visibility: str
         blobId: blobId)
     persist(result, ownerIp)
 
-proc zipEntryName(entry: MultipartEntry): string =
+func zipEntryName(entry: MultipartEntry): string =
     ## Normalise a browser-supplied relative path to a safe forward-slash zip entry name.
     ## Strips drive/leading separators and any "."/".." segments (path-traversal safe).
     let raw = if entry.filename.strip().len == 0: entry.name else: entry.filename
@@ -67,8 +66,7 @@ proc uploadFolder*(cfg: AppConfig, files: seq[MultipartEntry], folderName, owner
     for e in files: uncompressedTotal += e.size
     if uncompressedTotal > cfg.maxRequestBytes:
         raise newException(PayloadTooLargeError,
-            "Folder size exceeds the maximum allowed size of " &
-            $(cfg.maxRequestBytes div (1024 * 1024)) & "MB")
+            &"Folder size exceeds the maximum allowed size of {cfg.maxRequestBytes div (1024*1024)}MB")
 
     ensureWithinQuota(ownerIp, uncompressedTotal, cfg.maxStorageBytesPerIp)
 
@@ -99,7 +97,7 @@ proc downloadFile*(fileId: string): Option[DownloadData] =
     if fo.isNone: return none(DownloadData)
     let f = fo.get
     if f.blobId.len == 0 or not blobExists(f.blobId): return none(DownloadData)
-    some(DownloadData(fromBlob: true, blobPath: blobPath(f.blobId),
+    some(DownloadData(kind: dkBlob, blobPath: blobPath(f.blobId),
         contentType: f.contentType, fileName: f.originalName))
 
 proc deleteFile*(fileId: string): bool =

@@ -15,7 +15,7 @@
 ## The scan carries over the last `needle.len - 1` bytes between chunk reads, which is exactly the
 ## amount needed so a delimiter split across two `readBuffer` calls is still found.
 
-import std/[os, strutils, monotimes]
+import std/[os, strutils, monotimes, strformat]
 
 type
     MultipartEntry* = object
@@ -126,7 +126,7 @@ proc readLine2(s: Scanner, maxLen: int): tuple[line: string, atEof: bool] =
 # Header / boundary helpers
 # ---------------------------------------------------------------------------
 
-proc extractBoundary(contentTypeHeader: string): string =
+func extractBoundary(contentTypeHeader: string): string =
     ## Pull the boundary token out of a Content-Type header, case-insensitively. The value may be
     ## quoted (`boundary="..."`) or bare (`boundary=...;`). Returns "" if not present.
     let lower = contentTypeHeader.toLowerAscii()
@@ -143,13 +143,13 @@ proc extractBoundary(contentTypeHeader: string): string =
         v = v.strip()
     v
 
-proc unquote(v: string): string =
+func unquote(v: string): string =
     ## Strip a single pair (or a leading) double-quote from a header-parameter value.
     if v.len >= 2 and v[0] == '"' and v[^1] == '"': v[1 ..< v.len - 1]
     elif v.len >= 1 and v[0] == '"': v[1 .. ^1]
     else: v
 
-proc parseDisposition(paramsPart: string): tuple[name, filename: string, hasFilename: bool] =
+func parseDisposition(paramsPart: string): tuple[name, filename: string, hasFilename: bool] =
     ## Parse the parameters of a `Content-Disposition: form-data; name="..."; filename="..."` header.
     ## `paramsPart` is everything after the `:`. Note: a `filename` attribute (even `filename=""`)
     ## marks the part as a file, matching browser behavior.
@@ -172,8 +172,7 @@ proc uniqueTempPath(): string =
     ## monotonic clock ticks + an incrementing counter. Even under a concurrent-request race on
     ## the counter, the monotonic ticks differ, so collisions are not realistically possible.
     inc gTempSeq
-    getTempDir() / ("pastebin-mp-" & $getCurrentProcessId() & "-" &
-        $getMonoTime().ticks & "-" & $gTempSeq & ".tmp")
+    getTempDir() / (&"pastebin-mp-{getCurrentProcessId()}-{getMonoTime().ticks}-{gTempSeq}.tmp")
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -276,7 +275,7 @@ proc parseMultipart*(bodyPath: string, contentTypeHeader: string): seq[Multipart
             let name = entry.name
             let sink = proc(d: openArray[char]) =
                 if val.len.int64 + d.len.int64 > MaxFieldValueBytes:
-                    raise newException(MultipartError, "form field '" & name & "' exceeds maximum size")
+                    raise newException(MultipartError, &"form field '{name}' exceeds maximum size")
                 appendTo(val, d)
             discard copyUntilNeedle(s, needle, sink)
             # Trim the single trailing "\r" left by a CRLF body (no-op for an LF-only body).

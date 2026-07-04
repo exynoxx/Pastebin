@@ -21,7 +21,7 @@ proc nowIso*(): string =
     result.add frac
     result.add 'Z'
 
-proc isoToUniversal*(iso: string): string =
+func isoToUniversal*(iso: string): string =
     ## Reformat a stored ISO timestamp to .NET's "u" (universal sortable) format used inside
     ## create-paste-from-file content: "2026-07-04 12:34:56Z" (space instead of T, no fraction).
     ## Tolerant of both fractional and non-fractional inputs.

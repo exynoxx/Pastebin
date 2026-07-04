@@ -86,7 +86,7 @@ proc clearAdminFailures*(ip: string) =
     finally:
         release(gLock)
 
-proc constantTimeEq*(a, b: string): bool =
+func constantTimeEq*(a, b: string): bool =
     ## Length-checked constant-time compare: no early-out on the first differing byte, so a
     ## correct-prefix guess can't be distinguished from a wrong one by response timing.
     if a.len != b.len: return false

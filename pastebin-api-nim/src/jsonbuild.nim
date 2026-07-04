@@ -4,11 +4,13 @@
 import std/json
 import types
 
-proc errorJson*(msg: string): string =
+{.push raises: [].}   # nothing in this module may throw — pure JSON builders
+
+func errorJson*(msg: string): string =
     ## {"error": "..."} — the shared error envelope used across all endpoints.
     $(%*{"error": msg})
 
-proc pasteJson*(p: Paste): string =
+func pasteJson*(p: Paste): string =
     ## GET /api/pastes/{id} — Paste with [JsonIgnore] BlobId omitted.
     $(%*{
         "id": p.id,
@@ -20,25 +22,27 @@ proc pasteJson*(p: Paste): string =
         "visibility": p.visibility,
     })
 
-proc summariesJson*(items: seq[PasteSummary]): string =
+func summariesJson*(items: seq[PasteSummary]): string =
+    # Explicit accumulation, not `collect`: JsonNode isn't a collect-supported
+    # container, and this is a per-request response path (guide §10 RSS caveat).
     var arr = newJArray()
     for s in items:
-        arr.add(%*{
+        arr.add %*{
             "id": s.id,
             "title": s.title,
             "size": s.size,
             "createdAt": s.createdAt,
             "kind": s.kind,
             "contentType": (if s.contentType.len == 0: newJNull() else: %s.contentType),
-        })
+        }
     $arr
 
-proc adminPastesJson*(rows: seq[AdminPasteRow]): string =
+func adminPastesJson*(rows: seq[AdminPasteRow]): string =
     ## GET /api/admin/pastes — every paste with admin-only fields (ownerIp, hasBlob).
     ## The only builder that emits ownerIp.
     var arr = newJArray()
     for r in rows:
-        arr.add(%*{
+        arr.add %*{
             "id": r.id,
             "title": r.title,
             "size": r.size,
@@ -47,10 +51,10 @@ proc adminPastesJson*(rows: seq[AdminPasteRow]): string =
             "createdAt": r.createdAt,
             "visibility": r.visibility,
             "ownerIp": r.ownerIp,
-        })
+        }
     $arr
 
-proc storedFileJson*(f: StoredFile): string =
+func storedFileJson*(f: StoredFile): string =
     ## GET /api/files/{id} — StoredFile with [JsonIgnore] BlobId omitted.
     $(%*{
         "id": f.id,
@@ -61,6 +65,8 @@ proc storedFileJson*(f: StoredFile): string =
         "visibility": f.visibility,
     })
 
-proc fileUploadResultJson*(f: StoredFile): string =
+func fileUploadResultJson*(f: StoredFile): string =
     ## Response of /upload and /upload-folder — same visible fields as GET /api/files/{id}.
     storedFileJson(f)
+
+{.pop.}

@@ -1,6 +1,6 @@
 ## Paste service, mirroring pastebin-api/services/PasteService.cs.
 
-import std/[options, strutils, unicode, sysrand]
+import std/[options, strutils, unicode, sysrand, strformat]
 import config, types, db, blobstore, quota, ntfy, timeutil, apperrors
 
 const IdAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -12,7 +12,7 @@ proc generateId(): string =
     for b in bytes:
         result.add IdAlphabet[int(b) mod IdAlphabet.len]
 
-proc deriveTitle(content: string, maxChars: int): string =
+func deriveTitle(content: string, maxChars: int): string =
     ## First non-empty line, trimmed and capped at maxChars chars ("…" appended when cut).
     var firstLine = ""
     for rawLine in content.split('\n'):
@@ -26,7 +26,7 @@ proc deriveTitle(content: string, maxChars: int): string =
         return firstLine
     firstLine.runeSubStr(0, maxChars).strip(leading = false, trailing = true) & "…"
 
-proc buildPreview(content: string, previewChars: int): string =
+func buildPreview(content: string, previewChars: int): string =
     if content.runeLen <= previewChars:
         return content
     content.runeSubStr(0, previewChars) &
@@ -41,8 +41,7 @@ proc createPaste*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string)
 
     if byteCount > cfg.maxPasteBytes:
         raise newException(PayloadTooLargeError,
-            "Paste size exceeds the maximum allowed size of " &
-            $(cfg.maxPasteBytes div (1024 * 1024)) & "MB")
+            &"Paste size exceeds the maximum allowed size of {cfg.maxPasteBytes div (1024*1024)}MB")
 
     ensureWithinQuota(ownerIp, byteCount, cfg.maxStorageBytesPerIp)
 
@@ -86,7 +85,7 @@ proc openRaw*(id: string): Option[DownloadData] =
     if po.isNone: return none(DownloadData)
     let p = po.get
     if p.blobId.len > 0 and blobExists(p.blobId):
-        return some(DownloadData(fromBlob: true, blobPath: blobPath(p.blobId),
+        return some(DownloadData(kind: dkBlob, blobPath: blobPath(p.blobId),
             contentType: "text/plain; charset=utf-8", fileName: p.id & ".txt"))
-    return some(DownloadData(fromBlob: false, inlineData: p.content,
+    return some(DownloadData(kind: dkInline, inlineData: p.content,
         contentType: "text/plain; charset=utf-8", fileName: p.id & ".txt"))

@@ -23,7 +23,7 @@ var
     tlConn {.threadvar.}: DbConn
     tlOpen {.threadvar.}: bool
 
-proc int64OrZero(cell: string): int64 =
+func int64OrZero(cell: string): int64 =
     ## A possibly-empty SQLite text cell (NULL/absent surfaces as "") decoded as int64,
     ## defaulting to 0 — the read-side mirror of the schema's `COALESCE(SUM(size), 0)`.
     if cell.len == 0: 0'i64 else: parseBiggestInt(cell).int64

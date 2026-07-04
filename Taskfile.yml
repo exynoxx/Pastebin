@@ -80,7 +80,10 @@ tasks:
           echo "==> Pi registry storage: $BASE/registry  (published on :{{.REG_PORT}})"
           {{.SSH}} {{.PI_HOST}} "sudo mkdir -p '$BASE/registry' && \
             docker rm -f pastebin-registry >/dev/null 2>&1 || true; \
-            docker run -d --restart=always --name pastebin-registry \
+            docker run \
+              -d \
+              --restart=always \
+              --name pastebin-registry \
               -p {{.REG_PORT}}:5000 \
               -v '$BASE/registry':/var/lib/registry \
               registry:2"
@@ -91,7 +94,11 @@ tasks:
           TOML="$(mktemp)"
           printf '[registry."%s"]\n  http = true\n  insecure = true\n' "{{.PUSH_REGISTRY}}" > "$TOML"
           docker buildx rm {{.BUILDER}} >/dev/null 2>&1 || true
-          docker buildx create --name {{.BUILDER}} --driver docker-container --config "$TOML" --bootstrap
+          docker buildx create \
+            --name {{.BUILDER}} \
+            --driver docker-container \
+            --config "$TOML" \
+            --bootstrap
           rm -f "$TOML"
           echo "==> Retiring obsolete build-machine registry, if any"
           docker rm -f pastebin-registry >/dev/null 2>&1 || true
@@ -103,12 +110,20 @@ tasks:
       - cmd: |
           set -euo pipefail
           echo "==> Building + pushing API and nginx (arm64) to {{.PUSH_REGISTRY}}"
-          docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORM}} \
+          docker buildx build \
+            --builder {{.BUILDER}} \
+            --platform {{.PLATFORM}} \
             --provenance=false --sbom=false \
-            -t {{.PUSH_REGISTRY}}/pastebin-api:rpi -f pastebin-api-nim/Dockerfile pastebin-api-nim --push & api=$!
-          docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORM}} \
+            -t {{.PUSH_REGISTRY}}/pastebin-api:rpi \
+            -f pastebin-api-nim/Dockerfile pastebin-api-nim \
+            --push & api=$!
+          docker buildx build \
+            --builder {{.BUILDER}} \
+            --platform {{.PLATFORM}} \
             --provenance=false --sbom=false \
-            -t {{.PUSH_REGISTRY}}/pastebin-nginx:rpi -f nginx/Dockerfile . --push & ng=$!
+            -t {{.PUSH_REGISTRY}}/pastebin-nginx:rpi \
+            -f nginx/Dockerfile . \
+            --push & ng=$!
           wait $api || { echo "!! API image build/push failed" >&2; exit 1; }
           wait $ng  || { echo "!! nginx image build/push failed" >&2; exit 1; }
           echo "==> Pushed both images."
@@ -130,13 +145,18 @@ tasks:
           fi
           echo "==> Ensuring data + deploy dirs on the Pi (blobs/db owned by app uid 1654)"
           {{.SSH}} {{.PI_HOST}} "sudo mkdir -p '$BASE/blobs' '$BASE/db' && \
-            sudo chown 1654:1654 '$BASE/blobs' '$BASE/db' && mkdir -p '$BASE/deploy'"
+            sudo chown 1654:1654 '$BASE/blobs' '$BASE/db' && \
+            mkdir -p '$BASE/deploy'"
           echo "==> Syncing compose + .env to {{.PI_HOST}}:$BASE/deploy"
           {{.SCP}} docker-compose.rpi.yaml .env {{.PI_HOST}}:"$BASE/deploy/"
           echo "==> Pull + up on the Pi (data under $BASE; app config from the pushed .env)"
           {{.SSH}} {{.PI_HOST}} "cd '$BASE/deploy' && \
-            BLOB_HOST_PATH='$BASE/blobs' DB_HOST_PATH='$BASE/db' docker compose -f docker-compose.rpi.yaml pull && \
-            BLOB_HOST_PATH='$BASE/blobs' DB_HOST_PATH='$BASE/db' docker compose -f docker-compose.rpi.yaml up -d"
+            BLOB_HOST_PATH='$BASE/blobs' \
+            DB_HOST_PATH='$BASE/db' \
+            docker compose -f docker-compose.rpi.yaml pull && \
+            BLOB_HOST_PATH='$BASE/blobs' \
+            DB_HOST_PATH='$BASE/db' \
+            docker compose -f docker-compose.rpi.yaml up -d"
           echo "==> Deployed. Check: task ps"
 
   funnel:

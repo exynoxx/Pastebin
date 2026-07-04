@@ -5,7 +5,7 @@ import std/[json, strutils, options, os]
 import httpserver, config, clientip, jsonbuild, apperrors, timeutil
 import pastes, files, ratelimit, pasteguard, adminguard, multipart, types
 
-const BusyBody = "{\"error\":\"Server busy or rate limit exceeded. Please retry shortly.\"}"
+const BusyBody = errorJson("Server busy or rate limit exceeded. Please retry shortly.")
 
 # ---- small response helpers ------------------------------------------------
 
@@ -64,9 +64,10 @@ proc handleRawPaste(req: Request, id: string) =
         respondError(req, 404, "Paste not found")
         return
     let dd = d.get
-    if dd.fromBlob:
+    case dd.kind
+    of dkBlob:
         req.respondFile(dd.blobPath, dd.contentType, rangeHeader = req.header("Range"))
-    else:
+    of dkInline:
         req.respond(200, dd.inlineData, contentType = dd.contentType)
 
 proc handleRecentPastes(req: Request) =
@@ -83,7 +84,7 @@ proc handleAdminListPastes(req: Request) =
     req.respond(200, adminPastesJson(listAllPastes()))
 
 proc handleAdminDeletePaste(req: Request, id: string) =
-    if deletePaste(id): req.respond(200, "{\"message\":\"Paste deleted successfully\"}")
+    if deletePaste(id): req.respond(200, $(%*{"message": "Paste deleted successfully"}))
     else: respondError(req, 404, "Paste not found")
 
 # ---- file endpoints --------------------------------------------------------
@@ -194,7 +195,7 @@ proc handleViewFile(req: Request, id: string) =
         rangeHeader = req.header("Range"), noSniff = true)
 
 proc handleDeleteFile(req: Request, id: string) =
-    if deleteFile(id): req.respond(200, "{\"message\":\"File deleted successfully\"}")
+    if deleteFile(id): req.respond(200, $(%*{"message": "File deleted successfully"}))
     else: respondError(req, 404, "File not found")
 
 proc handleDebugIp(req: Request) =

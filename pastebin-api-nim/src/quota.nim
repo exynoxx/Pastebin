@@ -2,6 +2,7 @@
 ## Usage = SUM(size) across BOTH pastes and files for owner_ip. Checked BEFORE writing a blob
 ## so a rejected upload never orphans bytes. Intentionally non-transactional (TOCTOU), as in .NET.
 
+import std/strformat
 import db, apperrors
 
 proc ensureWithinQuota*(ownerIp: string, newSize, maxStorageBytesPerIp: int64) =
@@ -10,5 +11,4 @@ proc ensureWithinQuota*(ownerIp: string, newSize, maxStorageBytesPerIp: int64) =
     if usage + newSize > maxStorageBytesPerIp:
         let quotaMb = maxStorageBytesPerIp div (1024 * 1024)
         raise newException(PayloadTooLargeError,
-            "Storage quota exceeded for your address (" & $quotaMb & " MB). " &
-            "Delete old pastes or try later.")
+            &"Storage quota exceeded for your address ({quotaMb} MB). Delete old pastes or try later.")

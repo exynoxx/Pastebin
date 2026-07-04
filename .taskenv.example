@@ -1,0 +1,24 @@
+# Copy to .taskenv and fill in. .taskenv is gitignored — never commit it.
+# The Taskfile loads this for SSH/deploy settings and wraps ssh/scp with `sshpass`
+# so deploys need no interactive password prompt.
+
+# --- Your Pi's IP or hostname (used for SSH and the registry push address) ---
+PI_IP=raspberrypi.local
+# SSH login user on the Pi (SSH target = PI_USER@PI_IP).
+PI_USER=pi
+
+# Pi login password. Leave EMPTY to use an SSH key instead (recommended) — the
+# Taskfile then falls back to plain key-based ssh. If set, it's a plaintext
+# password on disk: fine for a personal LAN box, but don't reuse it anywhere.
+PI_PASS=
+
+# --- Where the stack's data lives on the Pi ---
+# DB + blobs + on-Pi registry all sit under this dir. A plain POSIX path works on
+# any fresh Pi. Must be ext4/xfs/btrfs (NOT FAT32/exFAT — SQLite WAL needs POSIX).
+PI_DATA_DIR=/srv/pastebin
+
+# Alternative to PI_DATA_DIR for OpenMediaVault-style boxes that mount a data disk
+# at /srv/dev-disk-by-uuid-<uuid>: give the filesystem UUID and the Taskfile
+# resolves the mountpoint at deploy time (data then lives under <mount>/pastebin).
+# If both are set, PI_DATA_DIR wins.
+# DATA_UUID=

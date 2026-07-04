@@ -1,0 +1,83 @@
+# Production stack for a Raspberry Pi 3B on the home network — tuned for ~900 MB RAM.
+#
+# Differences from the original heavy stack:
+#   - NO MongoDB container. Metadata lives in an embedded SQLite file on the USB drive.
+#   - NO Node container. nginx builds and serves the static React app itself.
+#   - NO TLS/DuckDNS here. The connection is behind CGNAT, so public access is via
+#     Tailscale Funnel (runs on the host): it terminates TLS and reverse-proxies
+#     https://<host>.ts.net -> http://<pi>:80. nginx serves plain HTTP, holds no cert.
+#   - mem_limit on every service so one component can't swap-thrash the whole box.
+#   - Capped json-file logging so container logs don't grind the SD card.
+#
+# Build the images OFF the Pi and push them to the on-Pi registry — see Taskfile.yml (`task`).
+# Building on the Pi itself (Nim toolchain + npm) will swap-thrash a 900 MB box.
+#
+# Deploy:  docker compose -f docker-compose.rpi.yaml up -d
+# (only add --build if you really mean to compile on the Pi)
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "5m"
+    max-file: "2"
+
+services:
+  pastebin-api:
+    # Built off-Pi and pulled from the Docker registry running ON THIS PI (container
+    # `pastebin-registry`, storage on the btrfs disk). The build machine pushes to it over an
+    # SSH tunnel; the Pi pulls from its own localhost:5000. See Taskfile.yml (`task setup`).
+    image: ${REGISTRY:-127.0.0.1:5000}/pastebin-api:rpi
+    expose:
+      - "8080"
+    environment:
+      # Binds 8080 by default; set PORT to override.
+      # Worker pool: keep well under cores*10 to stay in the 250 MB cap on the Pi 3B.
+      - WORKER_THREADS=${WORKER_THREADS:-8}
+      - SQLITE_PATH=/data/db/pastebin.db
+      - BLOB_STORAGE_PATH=/data/blobs
+      - MAX_REQUEST_BYTES=${MAX_REQUEST_BYTES:-1073741824}
+      - RATE_LIMIT_PER_IP_PER_MIN=${RATE_LIMIT_PER_IP_PER_MIN:-120}
+      - RATE_LIMIT_UPLOADS_PER_MIN=${RATE_LIMIT_UPLOADS_PER_MIN:-10}
+      - RATE_LIMIT_GLOBAL_CONCURRENCY=${RATE_LIMIT_GLOBAL_CONCURRENCY:-50}
+      - RATE_LIMIT_GLOBAL_PER_MIN=${RATE_LIMIT_GLOBAL_PER_MIN:-600}
+      - MAX_PASTE_BYTES=${MAX_PASTE_BYTES:-10485760}
+      - MAX_STORAGE_BYTES_PER_IP=${MAX_STORAGE_BYTES_PER_IP:-104857600}
+      # ntfy push on new paste/upload. Unset NTFY_TOPIC ⇒ notifier is a silent no-op.
+      - NTFY_TOPIC=${NTFY_TOPIC:-}
+      - NTFY_SERVER_URL=${NTFY_SERVER_URL:-https://ntfy.sh}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      # Admin endpoints require this token via X-Admin-Token. Unset ⇒ admin API disabled (fail-closed).
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
+    # Blobs AND the SQLite db live on the btrfs data disk, bind-mounted from the Pi. Both dirs
+    # must be writable by the container user (see the user override below + docs/SECURITY.md).
+    volumes:
+      - ${BLOB_HOST_PATH:?set BLOB_HOST_PATH to your USB mount path in .env}:/data/blobs
+      - ${DB_HOST_PATH:?set DB_HOST_PATH to a dir on your USB mount in .env}:/data/db
+    user: "${PASTEBIN_UID:-1654}:${PASTEBIN_GID:-1654}"
+    mem_limit: 250m
+    networks:
+      - pastebin-network
+    restart: unless-stopped
+    logging: *default-logging
+
+  nginx:
+    image: ${REGISTRY:-127.0.0.1:5000}/pastebin-nginx:rpi
+    container_name: pastebin-nginx
+    # Plain HTTP only. Public TLS is terminated by Tailscale Funnel, which reverse-proxies
+    # to http://<pi>:80, so nginx needs no cert and no 443 listener. OMV's web UI was moved
+    # off port 80 to 9000 (System -> Workbench -> Port) so :80 is free on the host.
+    # Override the host port via PASTEBIN_HTTP_PORT in .env if OMV ever takes 80 back
+    # (then point the funnel at that port instead).
+    ports:
+      - "${PASTEBIN_HTTP_PORT:-80}:80"
+    depends_on:
+      - pastebin-api
+    mem_limit: 64m
+    networks:
+      - pastebin-network
+    restart: unless-stopped
+    logging: *default-logging
+
+networks:
+  pastebin-network:
+    driver: bridge

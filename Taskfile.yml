@@ -1,0 +1,180 @@
+# Build & deploy for the Pi pastebin stack.  Run `task --list` for the menu.
+#
+# Topology:  build HERE (fast amd64 box, native arm64 cross-compile)  ──push──▶  registry
+#            ON THE PI (over the LAN)  ──pull──▶  the Pi's own containers.
+#
+#   - The registry runs ON THE PI (container `pastebin-registry`, storage on the btrfs data
+#     disk). The Pi is the always-on box with a stable address; this build machine is on
+#     WiFi/DHCP, so the registry shouldn't live here.
+#   - The registry is plain HTTP on the LAN. The build machine pushes to <pi-ip>:5000
+#     via a user-level "insecure" buildx builder (`buildx --push`), so NOTHING on the build
+#     machine's Docker daemon and NOTHING in the Pi's SSH/Docker config has to change — no
+#     sudo, nothing for OpenMediaVault to clobber.
+#   - The Pi pulls from its own 127.0.0.1:5000, which Docker trusts as insecure by default
+#     (127.0.0.0/8). Only the layers that changed cross the wire.
+#
+# Hands-free auth: the Pi password lives in .taskenv (gitignored, loaded below); ssh/scp are
+# wrapped with sshpass. Leave PI_PASS empty in .taskenv to use an SSH key instead.
+#
+# One-time:  task setup       (registry on the Pi + insecure buildx builder here)
+# Release:   task             (= build + deploy)
+
+version: '3'
+
+# .taskenv = SSH/deploy config (PI_IP, PI_USER, PI_PASS, PI_DATA_DIR/DATA_UUID); .env = app config
+# (`task deploy` copies the whole .env to the Pi, where compose reads it). Both are gitignored —
+# see the *.example files.
+dotenv: ['.taskenv', '.env']
+
+env:
+  SSHPASS: '{{.PI_PASS}}'
+
+vars:
+  # The Pi's IP or hostname — set this in .taskenv. Used for both SSH and the registry push address.
+  PI_IP: '{{.PI_IP | default "raspberrypi.local"}}'
+  # SSH login user on the Pi.
+  PI_USER: '{{.PI_USER | default "pi"}}'
+  # SSH login target = PI_USER@PI_IP.
+  PI_HOST: '{{.PI_USER}}@{{.PI_IP}}'
+  PLATFORM: linux/arm64          # the RPi's CPU arch — the target for the runtime image
+  REG_PORT: '5000'
+  # Build machine pushes to the Pi over the LAN at PI_IP:REG_PORT. The Pi itself pulls from
+  # 127.0.0.1:REG_PORT — set as REGISTRY in the pushed .env (127.0.0.1, not "localhost", so it
+  # can't resolve to ::1 and miss the registry). Same registry, two addresses.
+  PUSH_REGISTRY: '{{.PI_IP}}:{{.REG_PORT}}'
+  BUILDER: pastebin-builder
+  # Where DB + blobs + registry live on the Pi. Set ONE of these in .taskenv:
+  #   PI_DATA_DIR — a plain POSIX path (default for a fresh Pi), OR
+  #   DATA_UUID   — a filesystem UUID, resolved to its mountpoint (OMV-style /srv/dev-disk-by-uuid-…).
+  # PI_DATA_DIR wins if both are set. Empty defaults here so the resolution branch can error clearly.
+  PI_DATA_DIR: '{{.PI_DATA_DIR | default ""}}'
+  DATA_UUID: '{{.DATA_UUID | default ""}}'
+  # Name of the API container on the Pi (compose project prefix + service); used by `task logs`.
+  API_CONTAINER: '{{.API_CONTAINER | default "deploy-pastebin-api-1"}}'
+  # sshpass-wrapped ssh/scp when PI_PASS is set; plain (key-based) otherwise.
+  SSH: '{{if .PI_PASS}}sshpass -e {{end}}ssh -o StrictHostKeyChecking=accept-new'
+  SCP: '{{if .PI_PASS}}sshpass -e {{end}}scp -o StrictHostKeyChecking=accept-new'
+
+tasks:
+  default:
+    desc: Build + push to the Pi registry, then deploy (full release)
+    cmds:
+      - task: build
+      - task: deploy
+
+  setup:
+    desc: One-time — start the registry ON THE PI (btrfs storage) + an insecure buildx builder here
+    cmds:
+      - cmd: |
+          set -euo pipefail
+          PI_DATA_DIR='{{.PI_DATA_DIR}}'; DATA_UUID='{{.DATA_UUID}}'
+          if [ -n "$PI_DATA_DIR" ]; then
+            BASE="$PI_DATA_DIR"
+          elif [ -n "$DATA_UUID" ]; then
+            DM="$({{.SSH}} {{.PI_HOST}} "findmnt -rno TARGET -S UUID=$DATA_UUID | head -1")"
+            test -n "$DM" || { echo "!! data disk $DATA_UUID is not mounted on {{.PI_HOST}}"; exit 1; }
+            BASE="$DM/pastebin"
+          else
+            echo "!! set PI_DATA_DIR or DATA_UUID in .taskenv"; exit 1
+          fi
+          echo "==> Pi registry storage: $BASE/registry  (published on :{{.REG_PORT}})"
+          {{.SSH}} {{.PI_HOST}} "sudo mkdir -p '$BASE/registry' && \
+            docker rm -f pastebin-registry >/dev/null 2>&1 || true; \
+            docker run -d --restart=always --name pastebin-registry \
+              -p {{.REG_PORT}}:5000 \
+              -v '$BASE/registry':/var/lib/registry \
+              registry:2"
+          echo "==> Pi registry up."
+      - cmd: |
+          set -euo pipefail
+          echo "==> Creating buildx builder '{{.BUILDER}}' that trusts {{.PUSH_REGISTRY}} (plain HTTP)"
+          TOML="$(mktemp)"
+          printf '[registry."%s"]\n  http = true\n  insecure = true\n' "{{.PUSH_REGISTRY}}" > "$TOML"
+          docker buildx rm {{.BUILDER}} >/dev/null 2>&1 || true
+          docker buildx create --name {{.BUILDER}} --driver docker-container --config "$TOML" --bootstrap
+          rm -f "$TOML"
+          echo "==> Retiring obsolete build-machine registry, if any"
+          docker rm -f pastebin-registry >/dev/null 2>&1 || true
+          echo "==> Done. Build + deploy with: task"
+
+  build:
+    desc: Cross-build the arm64 images here and push them to the Pi's registry
+    cmds:
+      - cmd: |
+          set -euo pipefail
+          echo "==> Building + pushing API and nginx (arm64) to {{.PUSH_REGISTRY}}"
+          docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORM}} \
+            --provenance=false --sbom=false \
+            -t {{.PUSH_REGISTRY}}/pastebin-api:rpi -f pastebin-api-nim/Dockerfile pastebin-api-nim --push & api=$!
+          docker buildx build --builder {{.BUILDER}} --platform {{.PLATFORM}} \
+            --provenance=false --sbom=false \
+            -t {{.PUSH_REGISTRY}}/pastebin-nginx:rpi -f nginx/Dockerfile . --push & ng=$!
+          wait $api || { echo "!! API image build/push failed" >&2; exit 1; }
+          wait $ng  || { echo "!! nginx image build/push failed" >&2; exit 1; }
+          echo "==> Pushed both images."
+
+  deploy:
+    desc: Pull the images on the Pi (from its own registry) and (re)start the stack
+    cmds:
+      - cmd: |
+          set -euo pipefail
+          PI_DATA_DIR='{{.PI_DATA_DIR}}'; DATA_UUID='{{.DATA_UUID}}'
+          if [ -n "$PI_DATA_DIR" ]; then
+            BASE="$PI_DATA_DIR"
+          elif [ -n "$DATA_UUID" ]; then
+            DM="$({{.SSH}} {{.PI_HOST}} "findmnt -rno TARGET -S UUID=$DATA_UUID | head -1")"
+            test -n "$DM" || { echo "!! data disk $DATA_UUID is not mounted on {{.PI_HOST}}"; exit 1; }
+            BASE="$DM/pastebin"
+          else
+            echo "!! set PI_DATA_DIR or DATA_UUID in .taskenv"; exit 1
+          fi
+          echo "==> Ensuring data + deploy dirs on the Pi (blobs/db owned by app uid 1654)"
+          {{.SSH}} {{.PI_HOST}} "sudo mkdir -p '$BASE/blobs' '$BASE/db' && \
+            sudo chown 1654:1654 '$BASE/blobs' '$BASE/db' && mkdir -p '$BASE/deploy'"
+          echo "==> Syncing compose + .env to {{.PI_HOST}}:$BASE/deploy"
+          {{.SCP}} docker-compose.rpi.yaml .env {{.PI_HOST}}:"$BASE/deploy/"
+          echo "==> Pull + up on the Pi (data under $BASE; app config from the pushed .env)"
+          {{.SSH}} {{.PI_HOST}} "cd '$BASE/deploy' && \
+            BLOB_HOST_PATH='$BASE/blobs' DB_HOST_PATH='$BASE/db' docker compose -f docker-compose.rpi.yaml pull && \
+            BLOB_HOST_PATH='$BASE/blobs' DB_HOST_PATH='$BASE/db' docker compose -f docker-compose.rpi.yaml up -d"
+          echo "==> Deployed. Check: task ps"
+
+  funnel:
+    desc: One-time — install Tailscale on the Pi & expose the site publicly via Funnel (HTTPS)
+    # Behind CGNAT there's no port-forward; Funnel dials OUT, terminates TLS at Tailscale's
+    # edge with a real *.ts.net cert, and proxies https://<host>.ts.net -> http://localhost:PORT.
+    # TS_AUTHKEY (+ optional TS_HOSTNAME, PASTEBIN_HTTP_PORT) come from the Pi's deployed .env.
+    # Idempotent; survives reboots (tailscaled is a service + `funnel --bg` persists its config).
+    # One-time admin-console prereqs: MagicDNS on, HTTPS certs on, Funnel allowed for the node.
+    cmds:
+      - cmd: |
+          set -euo pipefail
+          {{.SSH}} {{.PI_HOST}} "PI_DATA_DIR='{{.PI_DATA_DIR}}' DATA_UUID='{{.DATA_UUID}}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          if [ -n "$PI_DATA_DIR" ]; then
+            BASE="$PI_DATA_DIR"
+          elif [ -n "$DATA_UUID" ]; then
+            DM="$(findmnt -rno TARGET -S UUID="$DATA_UUID" | head -1)"
+            test -n "$DM" || { echo "!! data disk not mounted on the Pi"; exit 1; }
+            BASE="$DM/pastebin"
+          else
+            echo "!! set PI_DATA_DIR or DATA_UUID in .taskenv"; exit 1
+          fi
+          cd "$BASE/deploy"
+          set -a; . ./.env; set +a
+          : "${TS_AUTHKEY:?set TS_AUTHKEY in the Pi's .env}"
+          command -v tailscale >/dev/null 2>&1 || curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --auth-key="$TS_AUTHKEY" --hostname="${TS_HOSTNAME:-rpi}"
+          sudo tailscale funnel --bg "http://localhost:${PASTEBIN_HTTP_PORT:-80}"
+          echo "==> Funnel status:"; sudo tailscale funnel status || true
+          REMOTE
+
+  ps:
+    desc: Show the stack status on the Pi
+    cmds:
+      - '{{.SSH}} {{.PI_HOST}} "docker ps"'
+
+  logs:
+    desc: Follow the API logs on the Pi (Ctrl-C to stop)
+    cmds:
+      - '{{.SSH}} {{.PI_HOST}} "docker logs --tail 80 -f {{.API_CONTAINER}}"'

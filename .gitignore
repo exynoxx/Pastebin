@@ -1,0 +1,19 @@
+/.idea
+obj/
+bin/
+node_modules/
+
+# Rider / Visual Studio per-user + solution files (dead C# leftovers post-Nim)
+*.sln
+*.DotSettings.user
+
+# Compiled Nim backend binary (build.sh output)
+/pastebin-api-nim/pastebin
+
+# Local secrets — never commit
+.env
+.taskenv
+build/
+
+# Backend backups (rollback insurance)
+backups/

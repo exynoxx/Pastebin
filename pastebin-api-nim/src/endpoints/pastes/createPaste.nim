@@ -1,7 +1,13 @@
-## Paste service, mirroring pastebin-api/services/PasteService.cs.
+## POST /api/pastes — create an inline/blob paste from a JSON body.
+##
+## `createPasteRecord` — the size-check → quota → inline-vs-blob → persist → notify pipeline — is
+## the one bit of paste logic shared with the create-paste-from-file slice, so it is exported here
+## (its canonical home) rather than living in a separate service layer.
 
-import std/[options, strutils, unicode, sysrand, strformat]
-import config, types, db, blobstore, quota, ntfy, timeutil, apperrors
+import std/[json, strutils, unicode, sysrand, strformat]
+import ../context
+import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
+       ../../timeutil, ../../apperrors, ../../pasteguard
 
 const IdAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
@@ -32,10 +38,11 @@ func buildPreview(content: string, previewChars: int): string =
     content.runeSubStr(0, previewChars) &
         "\n\n… (truncated — open the raw view for the full content)"
 
-proc createPaste*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string): Paste =
+proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string): Paste =
+    ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) on oversize/over-quota.
     let id = generateId()
     let ttl = if title.strip().len == 0: deriveTitle(content, cfg.untitledTitleMaxChars)
-                        else: title.strip()
+              else: title.strip()
     let byteCount = content.len.int64   # Nim strings are bytes => UTF-8 byte count
     let visibility = if visibilityIn == "private": "private" else: "public"
 
@@ -61,31 +68,22 @@ proc createPaste*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string)
     notifyPasteCreated(p)
     p
 
-proc getPaste*(id: string): Option[Paste] =
-    selectPaste(id)
-
-proc getRecentPastes*(limit: int): seq[PasteSummary] =
-    selectRecentSummaries(limit)
-
-proc listAllPastes*(): seq[AdminPasteRow] =
-    ## Admin: every paste regardless of visibility, newest first.
-    selectAllPastes()
-
-proc deletePaste*(id: string): bool =
-    ## Admin: remove a paste and its backing blob (if any). Mirrors files.deleteFile.
-    let po = getPaste(id)
-    if po.isNone: return false
-    let p = po.get
-    if p.blobId.len > 0:
-        discard deleteBlob(p.blobId)
-    deletePasteRow(id)
-
-proc openRaw*(id: string): Option[DownloadData] =
-    let po = getPaste(id)
-    if po.isNone: return none(DownloadData)
-    let p = po.get
-    if p.blobId.len > 0 and blobExists(p.blobId):
-        return some(DownloadData(kind: dkBlob, blobPath: blobPath(p.blobId),
-            contentType: "text/plain; charset=utf-8", fileName: p.id & ".txt"))
-    return some(DownloadData(kind: dkInline, inlineData: p.content,
-        contentType: "text/plain; charset=utf-8", fileName: p.id & ".txt"))
+proc handleCreatePaste*(ctx: Ctx) =
+    var root: JsonNode
+    try:
+        root = parseJson(ctx.req.bodyString())
+    except CatchableError:
+        ctx.respondError(400, "Invalid request body")
+        return
+    let content = root{"content"}.getStr("")
+    if content.strip().len == 0:
+        ctx.respondError(400, "Content cannot be empty")
+        return
+    if ctx.rejectPasteGuard(check(ctx.ip)): return
+    let title = root{"title"}.getStr("")
+    let visibility = root{"visibility"}.getStr("public")
+    try:
+        let p = createPasteRecord(ctx.cfg, title, content, visibility, ctx.ip)
+        ctx.req.respond(200, $(%*{"id": p.id}))
+    except PayloadTooLargeError as e:
+        ctx.respondError(413, e.msg)

@@ -2,7 +2,8 @@
 ## Wires config -> stores/services -> the minimal HTTP server, on port 8080 behind nginx.
 
 import std/strformat
-import config, db, blobstore, pasteguard, adminguard, ratelimit, ntfy, httpserver, router
+import config, db, blobstore, pasteguard, adminguard, ratelimit, ntfy, httpserver
+import endpoints/router, endpoints/routes
 
 var gConfig: AppConfig
 
@@ -23,6 +24,7 @@ proc main() =
     initAdminGuard()
     initRateLimiter(gConfig)
     initNtfy(gConfig)
+    initRoutes(registerRoutes())
 
     stdout.writeLine(&"pastebin-api (nim) listening on 0.0.0.0:{gConfig.port}" &
         &"  db={gConfig.sqlitePath}  blobs={gConfig.blobStoragePath}" &

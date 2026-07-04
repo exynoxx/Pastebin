@@ -9,5 +9,5 @@ docker run --rm \
   nimlang/nim:2.2.4-alpine \
   sh -c '
     apk add --no-cache sqlite-dev sqlite-static openssl-dev pcre >/dev/null 2>&1
-    nim c -o:pastebin src/pastebin.nim
+    nim c -o:pastebin src/main.nim
   '

@@ -6,7 +6,7 @@
 import std/[strutils, tables, strformat]
 import ../context
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../multipart
+       ../../timeutil, ../../apperrors, ../../framework/multipart
 import zippy/ziparchives
 
 func zipEntryName(entry: MultipartEntry): string =

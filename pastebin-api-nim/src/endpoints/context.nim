@@ -1,33 +1,21 @@
-## Shared request context + response helpers for the endpoint handlers.
-##
-## Every handler has the uniform shape `proc(ctx: Ctx)` — the equivalent of an ASP.NET
-## minimal-API delegate — so they can all sit in one route table (see routes.nim). `Ctx` carries
-## the dependencies a handler needs: the app config, the request, the resolved client IP, and any
-## `{param}` path segments the router captured.
-##
-## Re-exports httpserver/config/jsonbuild so each endpoint file gets Request, respond(), AppConfig
-## and the JSON builders from a single `import ../context`.
+## App request context — specialises the framework's generic context for this service and adds the
+## app-specific response helper. Endpoint handlers `import ../context` and get, from one import:
+## `Ctx` (bound to this app's config), `Request`, `respond`/`respondFile`, `AppConfig`, the JSON
+## builders, `errorJson`/`respondError`, and `rejectPasteGuard`.
 
 import std/json
-import ../httpserver, ../config, ../jsonbuild, ../pasteguard
+import ../framework/server
+import ../framework/context as fctx
+import ../config, ../jsonbuild, ../pasteguard
 
-export httpserver, config, jsonbuild
+export server, config, jsonbuild
+export fctx.errorJson, fctx.respondError
 
 type
-    Ctx* = object
-        cfg*: AppConfig       ## effective configuration (limits, quotas, paths)
-        req*: Request         ## the HTTP request being served
-        ip*: string           ## resolved client IP (rate-limit / quota / owner bucket)
-        params*: seq[string]  ## path parameters, in pattern order (e.g. the {id})
-
-    EndpointHandler* = proc(ctx: Ctx) {.nimcall.}
-        ## Uniform handler signature the router dispatches to.
-
-proc respondError*(req: Request, code: int, msg: string) =
-    req.respond(code, errorJson(msg))
-
-proc respondError*(ctx: Ctx, code: int, msg: string) =
-    ctx.req.respond(code, errorJson(msg))
+    Ctx* = fctx.Ctx[AppConfig]
+        ## The framework's generic context bound to this app's config bundle.
+    EndpointHandler* = fctx.Handler[AppConfig]
+        ## Uniform handler signature the app's route table dispatches to.
 
 proc rejectPasteGuard*(ctx: Ctx, d: Decision): bool =
     ## Returns true (and responds 429) when the paste is rate-limited; false when allowed.

@@ -10,22 +10,14 @@
 ## preferring it (as this once did) collapses ALL public users into one rate-limit/quota bucket.
 ## Precedence: first X-Forwarded-For -> X-Real-IP -> connection remote -> "unknown".
 
-import std/strutils
-import httpserver
+import std/[strutils, sequtils]
+import framework/server
 
 proc resolveClientIp*(req: Request): string =
-    let forwardedFor = req.header("X-Forwarded-For")
-    if forwardedFor.len > 0:
-        let comma = forwardedFor.find(',')
-        let firstEntry = if comma >= 0: forwardedFor[0 ..< comma] else: forwardedFor
-        let ip = firstEntry.strip()
-        if ip.len > 0:
-            return ip
-
-    let realIp = req.header("X-Real-IP")
-    if realIp.len > 0:
-        return realIp
-
-    if req.remoteAddress.len > 0:
-        return req.remoteAddress
-    "unknown"
+    [
+        req.header("X-Forwarded-For").split(',', 1)[0].strip(),
+        req.header("X-Real-IP").strip(),
+        req.remoteAddress,
+        "unknown",
+    ]
+    .filterIt(it.len > 0)[0]

@@ -48,7 +48,7 @@ RUN set -eux; \
       --os:linux --cpu:$NIMCPU \
       --cc:clang --clang.exe:zcc --clang.linkerexe:zcc --clang.cpp.exe:zcxx --clang.cpp.linkerexe:zcxx \
       --passC:-fPIC \
-      -o:/out/pastebin src/pastebin.nim
+      -o:/out/pastebin src/main.nim
 
 # ---- runtime: minimal glibc (debian-slim), non-root, /data mount points ----
 # glibc (not alpine/musl) so the dynamically-linked binary's loader + dlopen'd libs resolve.

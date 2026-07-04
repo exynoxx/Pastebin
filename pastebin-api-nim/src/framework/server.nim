@@ -29,14 +29,14 @@ type
         socket: Socket
         responded: bool
 
-    Handler* = proc(req: Request) {.nimcall, gcsafe.}
+    RequestHandler* = proc(req: Request) {.nimcall, gcsafe.}
 
 const
     RecvChunk = 64 * 1024
     SendChunk = 1 shl 20              # 1 MB streaming buffer for respondFile
 
 var
-    gHandler: Handler
+    gHandler: RequestHandler
     gBodySpillThreshold: int
     gMaxBodyBytes: int64
 
@@ -344,7 +344,7 @@ proc workerLoop() {.thread.} =
             handleConnection(client, address)
 
 proc serve*(port: int, numThreads: int, bodySpillThreshold: int,
-            maxBodyBytes: int64, handler: Handler) =
+            maxBodyBytes: int64, handler: RequestHandler) =
     ## Binds 0.0.0.0:port and runs `numThreads` accept/handle worker threads (blocking).
     gHandler = handler
     gBodySpillThreshold = bodySpillThreshold

@@ -6,9 +6,7 @@ import types
 
 {.push raises: [].}   # nothing in this module may throw — pure JSON builders
 
-func errorJson*(msg: string): string =
-    ## {"error": "..."} — the shared error envelope used across all endpoints.
-    $(%*{"error": msg})
+# The shared {"error": ...} envelope lives in the framework (framework/context.errorJson).
 
 func pasteJson*(p: Paste): string =
     ## GET /api/pastes/{id} — Paste with [JsonIgnore] BlobId omitted.

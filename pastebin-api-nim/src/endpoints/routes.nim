@@ -3,7 +3,7 @@
 ## per-route middleware flags — `admin` (X-Admin-Token gated) / `upload` (uploads rate-limit
 ## policy). Every handler body lives one-per-file under endpoints/<feature>/.
 
-import router
+import dispatch
 
 import
     pastes/recentPastes, pastes/createPaste, pastes/getPaste, pastes/rawPaste,
@@ -12,7 +12,7 @@ import
     admin/listPastes, admin/deletePaste,
     debug/ip
 
-proc registerRoutes*(): Router =
+proc registerRoutes*(): RouteTable =
     # Pastes
     result.get(   "/api/pastes",                       handleRecentPastes)
     result.post(  "/api/pastes",                       handleCreatePaste)

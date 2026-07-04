@@ -1,14 +1,15 @@
 ## App request context — specialises the framework's generic context for this service and adds the
 ## app-specific response helper. Endpoint handlers `import ../context` and get, from one import:
-## `Ctx` (bound to this app's config), `Request`, `respond`/`respondFile`, `AppConfig`, the JSON
-## builders, `errorJson`/`respondError`, and `rejectPasteGuard`.
+## `Ctx` (bound to this app's config), `Request`, `respond`/`respondFile`, `AppConfig`,
+## `errorJson`/`respondError`, and `rejectPasteGuard`. JSON response builders are no longer central:
+## each lives in its own vertical slice (e.g. endpoints/files/json, or inline in the handler).
 
 import std/json
 import ../framework/server
 import ../framework/context as fctx
-import ../config, ../jsonbuild, ../pasteguard
+import ../config, ../pasteguard
 
-export server, config, jsonbuild
+export server, config
 export fctx.errorJson, fctx.respondError
 
 type

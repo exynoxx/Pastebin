@@ -1,7 +1,8 @@
 ## The endpoint map — the one place that shows every route the API serves, in the spirit of an
-## ASP.NET minimal-API `Program.cs`. Each line is: verb, path (with {param}s), handler, and any
-## per-route middleware flags — `admin` (X-Admin-Token gated) / `upload` (uploads rate-limit
-## policy). Every handler body lives one-per-file under endpoints/<feature>/.
+## ASP.NET minimal-API `Program.cs`. Each line is: verb, path (with {param}s), handler, and the
+## optional `upload` flag (uploads rate-limit policy). Every handler body lives one-per-file under
+## endpoints/<feature>/. Admin routes gate themselves — each handler calls requireAdmin upfront
+## (endpoints/admin/guard) rather than declaring a flag here.
 
 import dispatch
 
@@ -26,8 +27,8 @@ proc registerRoutes*(): RouteTable =
     result.delete("/api/files/{id}",                   handleDeleteFile)
     result.get(   "/api/files/{id}/download",          handleDownloadFile)
     result.get(   "/api/files/{id}/raw",               handleViewFile)
-    # Admin (X-Admin-Token)
-    result.get(   "/api/admin/pastes",                 handleAdminListPastes,     admin = true)
-    result.delete("/api/admin/pastes/{id}",            handleAdminDeletePaste,    admin = true)
+    # Admin (X-Admin-Token — each handler calls requireAdmin upfront)
+    result.get(   "/api/admin/pastes",                 handleAdminListPastes)
+    result.delete("/api/admin/pastes/{id}",            handleAdminDeletePaste)
     # Debug
     result.get(   "/api/debug/ip",                     handleDebugIp)

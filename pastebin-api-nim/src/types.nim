@@ -13,7 +13,7 @@ type
         blobId*: string        ## internal: "" when inline. Never emitted in JSON.
 
     # Admin listing row: every paste regardless of visibility, plus owner_ip and
-    # a blob-backed flag. Only used by GET /api/admin/pastes (see jsonbuild.adminPastesJson).
+    # a blob-backed flag. Only used by GET /api/admin/pastes (see endpoints/admin/listPastes).
     AdminPasteRow* = object
         id*: string
         title*: string

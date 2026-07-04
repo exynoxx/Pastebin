@@ -3,9 +3,9 @@
 ## owns the HTTP server + per-request glue. Listens on port 8080 behind nginx.
 
 import std/strformat
-import config, db, blobstore, pasteguard, adminguard, ratelimit, ntfy
+import config, db, blobstore, pasteguard, ratelimit, ntfy
 import framework
-import endpoints/dispatch, endpoints/routes
+import endpoints/dispatch, endpoints/routes, endpoints/admin/guard
 
 proc main() =
     let cfg = loadConfig()

@@ -1,7 +1,8 @@
 ## The app's HTTP composition root: the route table + registration DSL, and `handle` — the
 ## per-request entry the framework calls on each worker thread. It resolves the client IP, matches
-## the route, then composes the cross-cutting policies (rate limiter, admin gate — see policies.nim)
-## around the matched endpoint via the framework's middleware chain. Runs on the server workers.
+## the route, then composes the cross-cutting policies (the rate limiter — see policies.nim) around
+## the matched endpoint via the framework's middleware chain. Runs on the server workers. (Admin
+## auth isn't composed here — admin handlers call requireAdmin upfront; see endpoints/admin/guard.)
 
 import ../framework/[server, router, middleware]
 import ../config, ../clientip
@@ -10,7 +11,6 @@ import context, policies
 type
     RoutePayload = object
         handler: EndpointHandler
-        admin: bool               ## require a valid X-Admin-Token (fail-closed + lockout)
         upload: bool              ## use the dedicated uploads rate-limit policy
 
     RouteTable* = Router[RoutePayload]
@@ -22,15 +22,14 @@ var
 
 # ---- registration DSL (used by routes.nim) ---------------------------------
 
-proc get*(r: var RouteTable, pattern: string, handler: EndpointHandler, admin = false) =
-    r.add("GET", pattern, RoutePayload(handler: handler, admin: admin, upload: false))
+proc get*(r: var RouteTable, pattern: string, handler: EndpointHandler) =
+    r.add("GET", pattern, RoutePayload(handler: handler, upload: false))
 
-proc post*(r: var RouteTable, pattern: string, handler: EndpointHandler,
-           admin = false, upload = false) =
-    r.add("POST", pattern, RoutePayload(handler: handler, admin: admin, upload: upload))
+proc post*(r: var RouteTable, pattern: string, handler: EndpointHandler, upload = false) =
+    r.add("POST", pattern, RoutePayload(handler: handler, upload: upload))
 
-proc delete*(r: var RouteTable, pattern: string, handler: EndpointHandler, admin = false) =
-    r.add("DELETE", pattern, RoutePayload(handler: handler, admin: admin, upload: false))
+proc delete*(r: var RouteTable, pattern: string, handler: EndpointHandler) =
+    r.add("DELETE", pattern, RoutePayload(handler: handler, upload: false))
 
 proc initRoutes*(r: RouteTable, cfg: AppConfig) =
     ## Install the route table + config. Call once at startup, before the workers start.
@@ -44,12 +43,9 @@ proc route(req: Request) =
     let m = gRoutes.match(req.httpMethod, splitPath(req.path))
     let ctx = Ctx(req: req, ip: ip, params: m.params, cfg: gCfg)
 
-    # The rate limiter is outermost so it wraps every request (matched or 404); the admin gate is
-    # added only for admin routes. Both are per-request closures (policies.nim).
+    # The rate limiter wraps every request (matched or 404) as a per-request closure (policies.nim).
     var chain: seq[Middleware[AppConfig]]
     chain.add rateLimit(isUpload = m.found and m.payload.upload)
-    if m.found and m.payload.admin:
-        chain.add adminGate()
 
     let final = proc() {.gcsafe.} =
         {.cast(gcsafe).}:

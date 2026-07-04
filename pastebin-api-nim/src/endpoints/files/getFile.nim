@@ -1,7 +1,7 @@
 ## GET /api/files/{id} — file metadata.
 
 import std/options
-import ../context
+import ../context, ./json
 import ../../db
 
 proc handleGetFile*(ctx: Ctx) =

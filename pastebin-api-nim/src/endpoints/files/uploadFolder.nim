@@ -4,7 +4,7 @@
 ## bounded by the per-IP quota reserved up front. Single-file uploads (the common path) stream.
 
 import std/[strutils, tables, strformat]
-import ../context
+import ../context, ./json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../framework/multipart
 import zippy/ziparchives
@@ -68,7 +68,7 @@ proc handleUploadFolder*(ctx: Ctx) =
             blobId: blobId)
         insertFile(f, ctx.ip)
         notifyFileUploaded(f)
-        ctx.req.respond(200, fileUploadResultJson(f))
+        ctx.req.respond(200, storedFileJson(f))
     except PayloadTooLargeError as e:
         ctx.respondError(413, e.msg)
     except CatchableError as e:

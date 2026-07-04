@@ -1,10 +1,11 @@
 ## DELETE /api/admin/pastes/{id} — admin delete a paste and its backing blob (if any).
 
 import std/[json, options]
-import ../context
+import ../context, guard
 import ../../types, ../../db, ../../blobstore
 
 proc handleAdminDeletePaste*(ctx: Ctx) =
+    if not ctx.requireAdmin(): return
     let po = selectPaste(ctx.params[0])
     if po.isNone:
         ctx.respondError(404, "Paste not found")

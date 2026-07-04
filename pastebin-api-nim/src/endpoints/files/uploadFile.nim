@@ -1,7 +1,7 @@
 ## POST /api/files/upload — multipart single-file upload (streams the body straight into a blob).
 
 import std/[options, strformat]
-import ../context
+import ../context, ./json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../framework/multipart
 
@@ -39,7 +39,7 @@ proc handleUploadFile*(ctx: Ctx) =
             blobId: blobId)
         insertFile(f, ctx.ip)
         notifyFileUploaded(f)
-        ctx.req.respond(200, fileUploadResultJson(f))
+        ctx.req.respond(200, storedFileJson(f))
     except PayloadTooLargeError as e:
         ctx.respondError(413, e.msg)
     except CatchableError as e:

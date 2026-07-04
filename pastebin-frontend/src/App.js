@@ -126,19 +126,22 @@ function FileInfo({ uploadedFile, onDownload, onClear }) {
 
   return (
     <div className="file-info">
-      <h4>📎 File Information</h4>
-      {isImage && (
+      {isImage ? (
         <a className="image-preview" href={rawUrl} target="_blank" rel="noreferrer" title="Open full size">
           <img src={rawUrl} alt={uploadedFile.originalName} loading="lazy" />
         </a>
+      ) : (
+        <>
+          <h4>📎 File Information</h4>
+          <div className="file-details">
+            <div><strong>Name:</strong> {uploadedFile.originalName}</div>
+            <div><strong>Size:</strong> {(uploadedFile.size / 1024).toFixed(2)} KB</div>
+            <div><strong>Type:</strong> {uploadedFile.contentType}</div>
+            <div><strong>Uploaded:</strong> {new Date(uploadedFile.uploadedAt).toLocaleString()}</div>
+            <div><strong>File ID:</strong> {uploadedFile.id}</div>
+          </div>
+        </>
       )}
-      <div className="file-details">
-        <div><strong>Name:</strong> {uploadedFile.originalName}</div>
-        <div><strong>Size:</strong> {(uploadedFile.size / 1024).toFixed(2)} KB</div>
-        <div><strong>Type:</strong> {uploadedFile.contentType}</div>
-        <div><strong>Uploaded:</strong> {new Date(uploadedFile.uploadedAt).toLocaleString()}</div>
-        <div><strong>File ID:</strong> {uploadedFile.id}</div>
-      </div>
       <div className="file-actions">
         <button type="button" className="btn-download" onClick={onDownload}>
           📥 Download File

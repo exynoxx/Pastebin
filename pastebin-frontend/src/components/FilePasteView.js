@@ -72,7 +72,7 @@ export function FilePasteView({ file, navigate }) {
             </div>
           </div>
 
-          {isImage && (
+          {isImage ? (
             <a
               className="image-preview"
               href={showUrl}
@@ -82,24 +82,24 @@ export function FilePasteView({ file, navigate }) {
             >
               <img src={showUrl} alt={file.originalName} loading="lazy" />
             </a>
-          )}
-
-          <div className="file-info">
-            <h4>📎 File Information</h4>
-            <div className="file-details">
-              <div><strong>Name:</strong> {file.originalName}</div>
-              <div><strong>Size:</strong> {(file.size / 1024).toFixed(2)} KB</div>
-              <div><strong>Type:</strong> {file.contentType}</div>
-              <div><strong>Uploaded:</strong> {new Date(file.uploadedAt).toLocaleString()}</div>
-              <div><strong>File ID:</strong> {file.id}</div>
-            </div>
-            {!canShow && (
-              <div className="alert alert-info">
-                This file is larger than 30 MB, so it can't be shown in the
-                browser — use “Download File” instead.
+          ) : (
+            <div className="file-info">
+              <h4>📎 File Information</h4>
+              <div className="file-details">
+                <div><strong>Name:</strong> {file.originalName}</div>
+                <div><strong>Size:</strong> {(file.size / 1024).toFixed(2)} KB</div>
+                <div><strong>Type:</strong> {file.contentType}</div>
+                <div><strong>Uploaded:</strong> {new Date(file.uploadedAt).toLocaleString()}</div>
+                <div><strong>File ID:</strong> {file.id}</div>
               </div>
-            )}
-          </div>
+              {!canShow && (
+                <div className="alert alert-info">
+                  This file is larger than 30 MB, so it can't be shown in the
+                  browser — use “Download File” instead.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

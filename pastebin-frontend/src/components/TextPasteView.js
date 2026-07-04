@@ -1,14 +1,16 @@
+import { useState } from 'react';
 import { formatBytes } from '../utils/format';
 
 export function TextPasteView({ paste, navigate }) {
   const rawUrl = `/api/pastes/${paste.id}/raw`;
+  const [copied, setCopied] = useState(false);
 
   const copyContent = () => {
-    if (paste) {
-      navigator.clipboard.writeText(paste.content).then(() => {
-        alert('Content copied to clipboard!');
-      });
-    }
+    if (!paste) return;
+    navigator.clipboard.writeText(paste.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
   };
 
   return (
@@ -26,8 +28,12 @@ export function TextPasteView({ paste, navigate }) {
             <button className="btn btn-secondary" onClick={() => navigate('/')}>
               New Paste
             </button>
-            <button className="btn btn-secondary" onClick={copyContent}>
-              Copy {paste.isTruncated ? 'Preview' : 'Content'}
+            <button
+              className="btn btn-secondary"
+              onClick={copyContent}
+              style={copied ? { backgroundColor: '#2e7d32', borderColor: '#2e7d32', color: '#fff' } : undefined}
+            >
+              {copied ? '✓ Copied!' : `Copy ${paste.isTruncated ? 'Preview' : 'Content'}`}
             </button>
             <a className="btn btn-secondary" href={rawUrl} target="_blank" rel="noreferrer">
               View Raw

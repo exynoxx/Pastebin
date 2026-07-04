@@ -91,36 +91,50 @@ export function Admin() {
         )}
 
         <ul className="recent-pastes">
-          {pastes.map((p) => (
-            <li key={p.id} className="recent-paste-item">
-              <div className="paste-header" style={{ marginBottom: 0 }}>
-                <div>
-                  <div className="paste-title">{p.title}</div>
-                  <div className="paste-meta">
-                    {new Date(p.createdAt).toLocaleString()}
-                    {` · ${formatBytes(p.size)}`}
-                    {` · ${p.visibility}`}
-                    {` · ${p.hasBlob ? 'blob' : 'text'}`}
-                    {` · IP ${p.ownerIp || 'unknown'}`}
+          {pastes.map((p) => {
+            const viewUrl = `/paste/${p.id}`;
+            // Plain click = View (SPA nav). Ctrl/Cmd/Shift/middle click falls through to the
+            // browser's default anchor behaviour, opening the paste in a new tab.
+            const openView = (e) => {
+              if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+              e.preventDefault();
+              navigate(viewUrl);
+            };
+            return (
+              <li key={p.id} className="recent-paste-item">
+                <div className="paste-header" style={{ marginBottom: 0 }}>
+                  <a
+                    href={viewUrl}
+                    onClick={openView}
+                    style={{ display: 'block', flex: 1, color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
+                  >
+                    <div className="paste-title">{p.title}</div>
+                    <div className="paste-meta">
+                      {new Date(p.createdAt).toLocaleString()}
+                      {` · ${formatBytes(p.size)}`}
+                      {` · ${p.visibility}`}
+                      {` · ${p.hasBlob ? 'blob' : 'text'}`}
+                      {` · IP ${p.ownerIp || 'unknown'}`}
+                    </div>
+                  </a>
+                  <div className="paste-actions">
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => navigate(viewUrl)}
+                    >
+                      View
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => deletePaste(p.id, p.title)}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
-                <div className="paste-actions">
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => navigate(`/paste/${p.id}`)}
-                  >
-                    View
-                  </button>
-                  <button
-                    className="btn btn-danger"
-                    onClick={() => deletePaste(p.id, p.title)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>

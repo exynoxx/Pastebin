@@ -4,7 +4,7 @@
 ## the matched endpoint via the framework's middleware chain. Runs on the server workers. (Admin
 ## auth isn't composed here — admin handlers call requireAdmin upfront; see endpoints/admin/guard.)
 
-import ../framework/[server, router, middleware]
+import ../webframework/[httpserver, router, middleware]
 import ../config, ../clientip
 import context, policies
 

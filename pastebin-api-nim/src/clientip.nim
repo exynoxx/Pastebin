@@ -11,7 +11,7 @@
 ## Precedence: first X-Forwarded-For -> X-Real-IP -> connection remote -> "unknown".
 
 import std/[strutils, sequtils]
-import framework/server
+import webframework/httpserver
 
 proc resolveClientIp*(req: Request): string =
     [

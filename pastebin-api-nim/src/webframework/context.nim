@@ -5,13 +5,13 @@
 ## dependency bundle `cfg: E` (e.g. the application config). Handlers all share the uniform shape
 ## `proc(ctx: Ctx[E])`, so a single route table can dispatch to any of them (see router.nim).
 ##
-## Re-exports `server` so an endpoint that imports the app's context gets `Request`, `respond`,
+## Re-exports `httpserver` so an endpoint that imports the app's context gets `Request`, `respond`,
 ## `respondFile`, the header/body/query helpers, etc. from one import.
 
 import std/json
-import server
+import httpserver
 
-export server
+export httpserver
 
 type
     Ctx*[E] = object

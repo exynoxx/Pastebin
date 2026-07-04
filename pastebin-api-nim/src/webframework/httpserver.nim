@@ -331,8 +331,8 @@ proc handleConnection(sock: Socket, remote: string) =
 var gListener: Socket
 
 proc workerLoop() {.thread.} =
-    # gListener/gHandler/gBodySpillThreshold/gMaxBodyBytes are all set once in serve() before any
-    # worker starts and only read here; accept() is thread-safe across workers on Linux.
+    # gListener/gHandler/gBodySpillThreshold/gMaxBodyBytes are all set once in listenAndServe()
+    # before any worker starts and only read here; accept() is thread-safe across workers on Linux.
     {.cast(gcsafe).}:
         while true:
             var client: Socket
@@ -343,8 +343,8 @@ proc workerLoop() {.thread.} =
                 continue
             handleConnection(client, address)
 
-proc serve*(port: int, numThreads: int, bodySpillThreshold: int,
-            maxBodyBytes: int64, handler: RequestHandler) =
+proc listenAndServe*(port: int, numThreads: int, bodySpillThreshold: int,
+                     maxBodyBytes: int64, handler: RequestHandler) =
     ## Binds 0.0.0.0:port and runs `numThreads` accept/handle worker threads (blocking).
     gHandler = handler
     gBodySpillThreshold = bodySpillThreshold

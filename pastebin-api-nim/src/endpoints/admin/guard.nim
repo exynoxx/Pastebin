@@ -8,12 +8,12 @@
 ##   2. A small fixed delay on the failing request itself (AdminFailPenaltyMs), so even the
 ##      first guess in a window costs real latency and token comparison is constant-time.
 ##
-## A successful auth clears the IP's counter. Mirrors pasteguard.nim's locking model: one
+## A successful auth clears the IP's counter. Mirrors ratelimit.nim's locking model: one
 ## process-wide lock guards the state Table, which is shared across all worker threads under ORC.
 ##
 ## `requireAdmin` is a fail-closed upfront guard, not middleware: the check is a pure precondition
 ## with no on-the-way-out work, so admin handlers call it as their first line — mirroring
-## context.rejectPasteGuard — rather than wrapping the request in the middleware chain.
+## context.rejectPasteLimit — rather than wrapping the request in the middleware chain.
 
 import std/[tables, locks, times, os]
 import ../context

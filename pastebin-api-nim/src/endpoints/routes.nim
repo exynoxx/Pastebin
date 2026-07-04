@@ -27,6 +27,7 @@ proc registerRoutes*(): RouteTable =
     result.delete("/api/files/{id}",                   handleDeleteFile)
     result.get(   "/api/files/{id}/download",          handleDownloadFile)
     result.get(   "/api/files/{id}/raw",               handleViewFile)
+    
     # Admin (X-Admin-Token — each handler calls requireAdmin upfront)
     result.get(   "/api/admin/pastes",                 handleAdminListPastes)
     result.delete("/api/admin/pastes/{id}",            handleAdminDeletePaste)

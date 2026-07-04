@@ -7,7 +7,7 @@
 import std/[json, strutils, unicode, sysrand, strformat]
 import ../context
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../pasteguard
+       ../../timeutil, ../../apperrors, ../../ratelimit
 
 const IdAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
@@ -79,7 +79,7 @@ proc handleCreatePaste*(ctx: Ctx) =
     if content.strip().len == 0:
         ctx.respondError(400, "Content cannot be empty")
         return
-    if ctx.rejectPasteGuard(check(ctx.ip)): return
+    if ctx.rejectPasteLimit(checkPasteCreate(ctx.ip)): return
     let title = root{"title"}.getStr("")
     let visibility = root{"visibility"}.getStr("public")
     try:

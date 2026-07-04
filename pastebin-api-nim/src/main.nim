@@ -1,10 +1,10 @@
 ## Entry point for the Nim Pastebin backend — a drop-in replacement for the .NET pastebin-api.
-## Wires config -> stores/services -> route table, then hands off to the framework's `run`, which
+## Wires config -> stores/services -> route table, then hands off to the framework's `serve`, which
 ## owns the HTTP server + per-request glue. Listens on port 8080 behind nginx.
 
 import std/strformat
-import config, db, blobstore, pasteguard, ratelimit, ntfy
-import framework
+import config, db, blobstore, ratelimit, ntfy
+import webframework/server
 import endpoints/dispatch, endpoints/routes, endpoints/admin/guard
 
 proc main() =
@@ -12,7 +12,6 @@ proc main() =
 
     initDb(cfg.sqlitePath)
     initBlobStore(cfg.blobStoragePath)
-    initPasteGuard(cfg)
     initAdminGuard()
     initRateLimiter(cfg)
     initNtfy(cfg)
@@ -23,7 +22,7 @@ proc main() =
         &"  workers={cfg.workerThreads}")
     stdout.flushFile()
 
-    run(
+    serve(
         port = cfg.port,
         numThreads = cfg.workerThreads,
         bodySpillThreshold = cfg.inlinePasteMaxBytes,

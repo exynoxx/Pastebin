@@ -3,7 +3,7 @@
 import std/[options, strformat]
 import ../context, ./json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../framework/multipart
+       ../../timeutil, ../../apperrors, ../../webframework/multipart
 
 proc handleUploadFile*(ctx: Ctx) =
     var entries: seq[MultipartEntry]

@@ -4,7 +4,7 @@
 ## matched-route facts (e.g. whether it's an upload route). Admin auth is NOT here — it's a pure
 ## precondition with no on-the-way-out work, so it lives as an upfront guard in endpoints/admin/guard.
 
-import ../framework/[server, context, middleware]
+import ../webframework/[httpserver, context, middleware]
 import ../config, ../ratelimit
 
 const BusyBody = errorJson("Server busy or rate limit exceeded. Please retry shortly.")

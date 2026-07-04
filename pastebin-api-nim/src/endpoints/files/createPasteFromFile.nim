@@ -3,7 +3,7 @@
 
 import std/[json, strutils, options]
 import ../context
-import ../../types, ../../db, ../../apperrors, ../../pasteguard, ../../timeutil
+import ../../types, ../../db, ../../apperrors, ../../ratelimit, ../../timeutil
 import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =
@@ -13,7 +13,7 @@ proc handleCreatePasteFromFile*(ctx: Ctx) =
     except CatchableError:
         ctx.respondError(400, "Invalid request body")
         return
-    if ctx.rejectPasteGuard(check(ctx.ip)): return
+    if ctx.rejectPasteLimit(checkPasteCreate(ctx.ip)): return
     let fileId = root{"fileId"}.getStr("")
     let fo = selectFile(fileId)
     if fo.isNone:

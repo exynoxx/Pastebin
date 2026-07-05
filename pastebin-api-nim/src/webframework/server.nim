@@ -7,8 +7,8 @@
 ## dispatch. It calls down into the HTTP server's `listenAndServe`; main never touches httpserver
 ## directly.
 
-import httpserver, context, router, middleware
-export httpserver, context, router, middleware
+import httpserver, context, router, middleware, dispatcher
+export httpserver, context, router, middleware, dispatcher
 
 var
     gDispatch: RequestHandler   ## app per-request entry; set once in serve(), read on the workers.

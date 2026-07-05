@@ -1,13 +1,12 @@
-## App request context — specialises the framework's generic context for this service and adds the
-## app-specific response helper. Endpoint handlers `import ../context` and get, from one import:
-## `Ctx` (bound to this app's config), `Request`, `respond`/`respondFile`, `AppConfig`,
-## `errorJson`/`respondError`, and `rejectPasteLimit`. JSON response builders are no longer central:
-## each lives in its own vertical slice (e.g. endpoints/files/json, or inline in the handler).
+## App request context — specialises the framework's generic context for this service. Endpoint
+## handlers `import ../context` and get, from one import: `Ctx` (bound to this app's config),
+## `Request`, `respond`/`respondFile`, `AppConfig`, and `errorJson`/`respondError`. JSON response
+## builders are no longer central: each lives in its own vertical slice (e.g. endpoints/files/json,
+## or inline in the handler). Rate-limit rejection helpers live with their logic in ratelimit.nim.
 
-import std/json
 import ../webframework/httpserver
 import ../webframework/context as fctx
-import ../config, ../ratelimit
+import ../config
 
 export httpserver, config
 export fctx.errorJson, fctx.respondError
@@ -17,19 +16,3 @@ type
         ## The framework's generic context bound to this app's config bundle.
     EndpointHandler* = fctx.Handler[AppConfig]
         ## Uniform handler signature the app's route table dispatches to.
-
-proc rejectPasteLimit*(ctx: Ctx, d: Decision): bool =
-    ## Returns true (and responds 429) when the paste is rate-limited; false when allowed.
-    if d.allowed: return false
-    let msg =
-        if d.penalized:
-            "Too many pastes. You've been rate-limited to 1 paste per minute for a while — please slow down."
-        else:
-            "Too many pastes in a short time. Please wait a moment and try again."
-    let body = $(%*{
-        "error": msg,
-        "retryAfterSeconds": d.retryAfterSeconds,
-        "penalized": d.penalized,
-    })
-    ctx.req.respond(429, body, extraHeaders = [("Retry-After", $d.retryAfterSeconds)])
-    true

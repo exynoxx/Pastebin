@@ -1,12 +1,14 @@
 ## The app's HTTP composition root: the route table + registration DSL, and `handle` — the
-## per-request entry the framework calls on each worker thread. It resolves the client IP, matches
-## the route, then composes the cross-cutting policies (the rate limiter — see policies.nim) around
-## the matched endpoint via the framework's middleware chain. Runs on the server workers. (Admin
-## auth isn't composed here — admin handlers call requireAdmin upfront; see endpoints/admin/guard.)
+## per-request entry the framework calls on each worker thread. The generic per-request flow
+## (match → build context → run middleware chain → handler/404) lives in the framework
+## (webframework/dispatcher); here we only supply the app-specific pieces: the route payload, the
+## client-IP resolver, the not-found handler, and the cross-cutting policy chain (the rate limiter —
+## see ratelimit.nim). Runs on the server workers. (Admin auth isn't composed here — admin handlers
+## call requireAdmin upfront; see endpoints/admin/guard.)
 
-import ../webframework/[httpserver, router, middleware]
-import ../config, ../clientip
-import context, policies
+import ../webframework/[httpserver, router, middleware, dispatcher]
+import ../config, ../clientip, ../ratelimit
+import context
 
 type
     RoutePayload = object
@@ -36,27 +38,19 @@ proc initRoutes*(r: RouteTable, cfg: AppConfig) =
     gRoutes = r
     gCfg = cfg
 
-# ---- per-request entry -----------------------------------------------------
+# ---- app-specific dispatch pieces (injected into the framework) -------------
 
-proc route(req: Request) =
-    let ip = resolveClientIp(req)
-    let m = gRoutes.match(req.httpMethod, splitPath(req.path))
-    let ctx = Ctx(req: req, ip: ip, params: m.params, cfg: gCfg)
+proc notFound(ctx: Ctx) =
+    ctx.respondError(404, "Not found")
 
-    # The rate limiter wraps every request (matched or 404) as a per-request closure (policies.nim).
-    var chain: seq[Middleware[AppConfig]]
-    chain.add rateLimit(isUpload = m.found and m.payload.upload)
+proc handlerFor(found: bool, p: RoutePayload): EndpointHandler {.gcsafe.} =
+    if found: p.handler else: notFound
 
-    let final = proc() {.gcsafe.} =
-        {.cast(gcsafe).}:
-            if not m.found:
-                respondError(req, 404, "Not found")
-            else:
-                m.payload.handler(ctx)
-
-    runChain(ctx, chain, final)
+proc chainFor(found: bool, p: RoutePayload): seq[Middleware[AppConfig]] {.gcsafe.} =
+    # The rate limiter wraps every request (matched or 404) as the outermost middleware.
+    @[rateLimit(isUpload = found and p.upload)]
 
 proc handle*(req: Request) {.nimcall, gcsafe.} =
     ## The framework's dispatch hook (a RequestHandler), run on each worker thread.
     {.cast(gcsafe).}:
-        route(req)
+        dispatchRequest(gRoutes, gCfg, req, resolveClientIp, handlerFor, chainFor)

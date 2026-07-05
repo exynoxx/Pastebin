@@ -3,7 +3,8 @@
 ##
 ## Two policies, two entry points, kept distinct because they enforce different things:
 ##
-## 1. `tryAcquire` — runs on EVERY request (see endpoints/policies.nim), mirroring the chained
+## 1. `tryAcquire` — runs on EVERY request (via the `rateLimit` middleware below, composed in
+##    endpoints/dispatch.nim), mirroring the chained
 ##    limiters in pastebin-api/program.cs. Three limiters apply, in order:
 ##      a. per-IP sliding window   (perIpPerMinute,  1 min, 6 segments)
 ##      b. global sliding window   (globalPerMinute, 1 min, 6 segments)
@@ -16,16 +17,21 @@
 ##    pastebin-api/services/PasteRateGuard.cs. Normal mode: up to burstLimit pastes within a rolling
 ##    windowSeconds; the paste that would exceed that is rejected AND trips a penalty box — for the
 ##    next penaltySeconds the IP is limited to one paste per penaltyIntervalSeconds. Rejection ->
-##    the route layer answers 429 + Retry-After (see endpoints/context.rejectPasteLimit).
+##    the route layer answers 429 + Retry-After (via `rejectPasteLimit` below).
 ##
 ## Admin brute-force protection is deliberately NOT here — it counts failures, not requests, and
 ## escalates its own lockout; see endpoints/admin/guard.nim.
 ##
 ## Under Nim's shared-heap ORC the state Table is reachable from all worker threads, so a single
 ## process-wide lock guards every access.
+##
+## This module also owns how the two policies surface over HTTP: `rateLimit` (the request middleware
+## that answers 503) and `rejectPasteLimit` (the paste 429). Keeping the decision logic and its
+## HTTP presentation together is why this module depends on the framework.
 
-import std/[tables, deques, locks, times]
+import std/[tables, deques, locks, times, json]
 import config
+import webframework/[httpserver, context, middleware]
 
 const
     Segments = 6
@@ -200,3 +206,40 @@ proc checkPasteCreate*(ip: string): Decision =
                 result = Decision(allowed: true, retryAfterSeconds: 0, penalized: false)
     finally:
         release(gLock)
+
+# ---- HTTP adapters (framework middleware + rejection helper) ----------------
+
+const BusyBody = errorJson("Server busy or rate limit exceeded. Please retry shortly.")
+
+proc rateLimit*(isUpload: bool): Middleware[AppConfig] =
+    ## Request middleware: acquire on the way in — 503 + Retry-After if any tier rejects — and
+    ## release the concurrency slot on the way out. `isUpload` selects the stricter per-IP uploads
+    ## policy. Composed as the outermost middleware (dispatch.nim), so it also covers 404s. Each
+    ## call returns a fresh per-request closure that captures the matched route's upload flag.
+    result = proc(ctx: Ctx[AppConfig], next: Next) {.gcsafe.} =
+        {.cast(gcsafe).}:
+            let acq = tryAcquire(ctx.ip, isUpload)
+            if not acq.allowed:
+                ctx.req.respond(503, BusyBody, extraHeaders = [("Retry-After", "10")])
+                return
+            try:
+                next()
+            finally:
+                if acq.concurrencyHeld: releaseConcurrency()
+
+proc rejectPasteLimit*(ctx: Ctx[AppConfig], d: Decision): bool =
+    ## Turn a `checkPasteCreate` decision into an HTTP outcome: returns true (and responds 429) when
+    ## the paste is rate-limited; false when it's allowed and the handler should proceed.
+    if d.allowed: return false
+    let msg =
+        if d.penalized:
+            "Too many pastes. You've been rate-limited to 1 paste per minute for a while — please slow down."
+        else:
+            "Too many pastes in a short time. Please wait a moment and try again."
+    let body = $(%*{
+        "error": msg,
+        "retryAfterSeconds": d.retryAfterSeconds,
+        "penalized": d.penalized,
+    })
+    ctx.req.respond(429, body, extraHeaders = [("Retry-After", $d.retryAfterSeconds)])
+    true

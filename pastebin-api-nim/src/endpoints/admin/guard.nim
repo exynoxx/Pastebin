@@ -13,7 +13,7 @@
 ##
 ## `requireAdmin` is a fail-closed upfront guard, not middleware: the check is a pure precondition
 ## with no on-the-way-out work, so admin handlers call it as their first line — mirroring
-## context.rejectPasteLimit — rather than wrapping the request in the middleware chain.
+## ratelimit.rejectPasteLimit — rather than wrapping the request in the middleware chain.
 
 import std/[tables, locks, times, os]
 import ../context

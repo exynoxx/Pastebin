@@ -9,11 +9,12 @@ behind CGNAT**, so the whole design is memory-lean and exposed publicly via **Ta
 
 ```
 public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 ──▶ pastebin-api :8080
-                  (terminates TLS)                (static SPA      (.NET 8, SQLite + blob store)
+                  (terminates TLS)                (static SPA      (Nim, SQLite + blob store)
                                                    + /api proxy)
 ```
 
-- **`pastebin-api/`** — .NET 8 C# backend. The source of truth for all limits, quotas, and storage.
+- **`pastebin-api-nim/`** — **Nim backend, the deployed one.** Source of truth for all limits,
+  quotas, and storage. (`pastebin-api/` is a non-deployed .NET reference port — see Backend below.)
 - **`pastebin-frontend/`** — React 18 SPA (Create React App / `react-scripts`). `npm run build` → static `/build`.
 - **`nginx/`** — Reverse proxy + static serving. Serves the built SPA, proxies `/api/*` to the API,
   sets `X-Real-IP`/`X-Forwarded-For`, applies `security-headers.conf`. Serves **plain HTTP on :80** —
@@ -33,31 +34,45 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
 - **Reuse before you write.** Prefer the standard library and existing common/shared helpers over
   hand-rolled equivalents. Don't reinvent what already exists — simpler, cleaner code wins.
 
-## Backend components (`pastebin-api/`)
+## Backend (`pastebin-api-nim/`) — the deployed one
 
-**Controllers** (`controllers/`)
-- `PastesController` — create/fetch/list pastes; `/api/pastes/{id}/raw` streams full text.
-- `FilesController` — single-file upload, multi-file folder→zip upload, create-paste-from-file.
-- `DebugController` — `/api/debug/ip` diagnostic: echoes the caller's IP header chain
-  (`resolvedClientIp`, `X-Forwarded-For`, `X-Real-IP`, …) to verify what reaches the API behind Funnel.
+The Pi runs this **Nim** backend (`task build` builds `pastebin-api-nim/Dockerfile`). A parallel
+.NET tree, `pastebin-api/`, was the original reference port — same routes, env vars, and DB/blob
+format, so it's rollback-compatible on the shared data disk — but it is **not deployed** and need
+not be kept in step. Edit the Nim tree to change runtime behavior. Onion structure under
+`pastebin-api-nim/src/`:
 
-**Services** (`services/`)
-- `PasteService` — inline pastes (<256 KB) stored in SQLite; larger ones go to the blob store.
-- `FileUploadService` — writes uploads to the blob store, records `StoredFile` rows.
-- `FileSystemBlobStore` (`IBlobStore`) — streams blobs to disk with 2-char sharding (`ab/ab12…gz`),
-  atomic temp→final writes, seekable reads (HTTP range/resume).
-- `SqliteConnectionFactory` — opens `SQLITE_PATH`, creates schema (`pastes`, `files`) on startup.
-- `StorageQuota` — per-IP storage cap (`MAX_STORAGE_BYTES_PER_IP`, default 100 MB).
-- `ClientIp.Resolve(context)` — resolves the client IP used for **rate-limit and quota bucketing**.
-  Uses the **first `X-Forwarded-For` entry**: verified via `/api/debug/ip`, Funnel sets XFF to the
-  real public client (and drops any client-supplied XFF, so the leftmost hop isn't spoofable via the
-  public path), then nginx appends the docker-bridge gateway → `"<client>, 172.18.0.1"`. `X-Real-IP`
-  is nginx's `$remote_addr` (that constant gateway), so it's only a fallback — preferring it (the old
-  bug) collapsed every public user into one bucket. Same precedence in the Nim `resolveClientIp`.
+- `main.nim` — entrypoint/wiring. `config.nim` — every env-var limit + default (byte-identical to
+  the .NET defaults), incl. the 3-tier rate limits and `uploads` policy.
+- **`endpoints/routes.nim` — the route map** (verb → path → handler). Start here to find any
+  endpoint. One handler per file under `endpoints/{pastes,files,admin,debug}/`: createPaste,
+  rawPaste (`/api/pastes/{id}/raw` streams full text), recentPastes, getPaste; uploadFile,
+  uploadFolder (folder→zip), downloadFile, viewFile, createPasteFromFile, getFile, deleteFile;
+  admin listPastes/deletePaste (+ `guard.nim`); debug `ip` (`/api/debug/ip` echoes the caller's IP
+  header chain — `resolvedClientIp`, XFF, X-Real-IP — to verify what reaches the API behind Funnel).
+- Services: `db.nim` (SQLite via `db_connector`; creates schema `pastes`+`files` on startup),
+  `blobstore.nim` (blob store, 2-char sharding `ab/ab12…`, atomic temp→final writes, seekable/Range
+  reads; `saveFromString` for inline-overflow, `saveFromFile` for uploads — paste content <256 KB
+  stays inline in SQLite, larger → blob), `quota.nim` (per-IP cap `MAX_STORAGE_BYTES_PER_IP`,
+  100 MB), `ratelimit.nim` (per-IP sliding window + global sliding window + global concurrency cap),
+  `ntfy.nim`, `timeutil.nim` (.NET `"o"` timestamps), `types.nim`, `apperrors.nim`.
+- `clientip.nim` — `resolveClientIp`, the client IP for **rate-limit + quota bucketing**. Uses the
+  **first `X-Forwarded-For` entry**: Funnel sets XFF to the real public client (dropping any
+  client-supplied XFF, so the leftmost hop isn't spoofable via the public path), then nginx appends
+  the docker-bridge gateway → `"<client>, 172.18.0.1"`. `X-Real-IP` is nginx's `$remote_addr` (that
+  constant gateway), a fallback only — preferring it (an old bug) collapsed every user into one bucket.
+- `webframework/` — hand-rolled HTTP stack, no framework dep: `httpserver.nim` (`std/net`; streams
+  bodies over the spill threshold to a temp file; Range support), `router.nim`, `multipart.nim`
+  (custom parser), `dispatcher.nim`, `middleware.nim`, `context.nim`, `server.nim`. Optional
+  per-request `NETLOG` stdout line for IP-chain debugging (disable with `NETWORK_LOG=false`).
+- `pastebin.nimble` — deps: `db_connector`, `zippy` (folder→zip); needs `nim >= 2.0`.
 
-**`program.cs`** — wires config (env-var overridable limits), 3-tier rate limiting (per-IP sliding
-window, global sliding window, global concurrency cap) + an `uploads` policy, and an optional
-per-request `NETLOG` stdout line for IP-chain debugging (disable with `NETWORK_LOG=false`).
+Local dev (no Docker; `nim` is on PATH at `~/.nimble/bin/nim`):
+- Type-check: `cd pastebin-api-nim && nim check --hints:off src/main.nim` (exit 0 = clean).
+- Build: `nim c -o:<out> src/main.nim`.
+- Run e2e: `SQLITE_PATH=<dir>/db.sqlite BLOB_STORAGE_PATH=<dir>/blobs PORT=18080
+  ADMIN_TOKEN=<tok> NETWORK_LOG=false <binary>`, then curl `http://127.0.0.1:$PORT/api/…`.
+  Blob paths (vs inline SQLite) trigger at paste content >256 KB and on any file upload.
 
 ## Deploy
 
@@ -74,14 +89,26 @@ is all driven by **`Taskfile.yml`** (`task --list` for the menu):
 - `task ps` / `task logs` — status / follow the API logs on the Pi.
 
 Auth is hands-free: the Pi password lives in **`.taskenv`** (gitignored, `PI_PASS=<pi-password>`) and `ssh`/`scp`
-are `sshpass`-wrapped; leave `PI_PASS` empty to use an SSH key instead. The data disk is located by
+are `sshpass`-wrapped; leave `PI_PASS` empty to use an SSH key instead.
+
+**Deploying off-LAN (over Tailscale).** `.taskenv` pins `PI_IP` to the LAN address (`192.168.0.30`);
+when the workstation isn't on the Pi's LAN, deploy over the tailnet instead — the Pi is `rpi`
+(`100.120.214.111`) and its registry (`:5000`) + SSH (`:22`) are reachable there. Steps: (1) start
+`tailscaled` locally (`sudo systemctl start tailscaled` — needs the user's sudo password); (2) recreate
+the buildx builder to trust the **tailnet** registry (the builder's insecure-registry trust is pinned
+to one `host:port`, so the LAN builder won't push over tailnet): rebuild `pastebin-builder` with a
+config TOML for `100.120.214.111:5000` — same commands as `task setup`'s second step; (3) override the
+IP on every task call: `task PI_IP=100.120.214.111 build` then `task PI_IP=100.120.214.111 deploy`
+(also `ps`/`logs`). The Pi still pulls from its own `127.0.0.1:5000`, so nothing else changes. The data disk is located by
 filesystem **UUID** (`<data-uuid>`), not mount path, since OMV mounts it at `/srv/dev-disk-by-uuid-<uuid>`.
 
-- **Build stages run natively, not emulated.** Both Dockerfiles pin their SDK/npm build stage to
+- **Build stages run natively, not emulated.** Both Dockerfiles pin their build stage to
   `FROM --platform=$BUILDPLATFORM …` (the workstation's amd64) and target arm64 only for the final
-  runtime image. The .NET publish is framework-dependent IL (`UseAppHost=false`) and the React build
-  is static JS — both arch-neutral — so this skips slow QEMU emulation. **Don't drop the
-  `--platform=$BUILDPLATFORM` pins** or the heavy build steps run under emulation again (minutes slower).
+  runtime image. The React build is static JS (arch-neutral). The Nim API build stays QEMU-free by
+  compiling Nim→C natively on amd64, then cross-compiling that C to arm64 **glibc** with `zig cc`
+  (glibc, not musl, so the runtime's `dlopen` of libsqlite3/openssl works — see the Dockerfile
+  header). **Don't drop the `--platform=$BUILDPLATFORM` pins** or the heavy steps run under emulation
+  again (minutes slower).
 - **Only changed layers cross the wire.** The registry lives ON the Pi (the always-on box with a
   stable address; the build machine is on WiFi/DHCP). `buildx --push` sends only new layers, so
   steady-state deploys are ~15 s. `--provenance=false --sbom=false` skips attestation manifests

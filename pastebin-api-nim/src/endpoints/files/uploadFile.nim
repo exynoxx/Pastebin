@@ -15,8 +15,11 @@ proc handleUploadFile*(ctx: Ctx) =
     var fileEntry: Option[MultipartEntry]
     var visibility = "public"
     for e in entries:
-        if e.name == "file" and e.isFile: fileEntry = some(e)
-        elif e.name == "visibility": visibility = e.value
+        case e.name
+        of "file":
+            if e.isFile: fileEntry = some(e)
+        of "visibility": visibility = e.value
+        else: discard
     if fileEntry.isNone or fileEntry.get.size == 0:
         cleanupEntries(entries)
         ctx.respondError(400, "No file provided")

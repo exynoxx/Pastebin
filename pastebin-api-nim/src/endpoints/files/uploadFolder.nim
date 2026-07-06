@@ -39,9 +39,12 @@ proc handleUploadFolder*(ctx: Ctx) =
     var folderName = ""
     var visibility = "public"
     for e in entries:
-        if e.isFile and e.name == "files": fileParts.add e
-        elif e.name == "folderName": folderName = e.value
-        elif e.name == "visibility": visibility = e.value
+        case e.name
+        of "files":
+            if e.isFile: fileParts.add e
+        of "folderName": folderName = e.value
+        of "visibility": visibility = e.value
+        else: discard
     if fileParts.len == 0:
         cleanupEntries(entries)
         ctx.respondError(400, "No files provided")

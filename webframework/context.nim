@@ -23,6 +23,22 @@ type
     Handler*[E] = proc(ctx: Ctx[E]) {.nimcall.}
         ## Uniform handler signature the router dispatches to.
 
+# ---- request-info accessors ------------------------------------------------
+# Thin conveniences so a handler reads request info off its Ctx instead of reaching through `.req`.
+
+proc header*[E](ctx: Ctx[E], name: string): string = ctx.req.header(name)
+proc queryParam*[E](ctx: Ctx[E], name: string): string = ctx.req.queryParam(name)
+func httpMethod*[E](ctx: Ctx[E]): string = ctx.req.httpMethod
+func path*[E](ctx: Ctx[E]): string = ctx.req.path
+func remoteAddress*[E](ctx: Ctx[E]): string = ctx.req.remoteAddress
+proc origin*[E](ctx: Ctx[E]): string = ctx.req.header("Origin")
+
+proc respond*[E](ctx: Ctx[E], statusCode: int, body: string,
+                 contentType = "application/json; charset=utf-8",
+                 extraHeaders: openArray[(string, string)] = []) =
+    ## Ctx-level counterpart to respondError, for success bodies.
+    ctx.req.respond(statusCode, body, contentType, extraHeaders)
+
 # ---- handler control-flow templates ----------------------------------------
 # These early-`return` from the enclosing handler, so they must be templates, not procs.
 # `isNone`/`get` are resolved at the call site (every handler using fetchOr404 imports std/options).

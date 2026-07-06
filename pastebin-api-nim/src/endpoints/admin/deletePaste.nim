@@ -6,11 +6,7 @@ import ../../types, ../../db, ../../blobstore
 
 proc handleAdminDeletePaste*(ctx: Ctx) =
     if not ctx.requireAdmin(): return
-    let po = selectPaste(ctx.params[0])
-    if po.isNone:
-        ctx.respondError(404, "Paste not found")
-        return
-    let p = po.get
+    let p = fetchOr404(ctx, selectPaste(ctx.params[0]), "Paste not found")
     if p.blobId.len > 0:
         discard deleteBlob(p.blobId)
     if deletePasteRow(ctx.params[0]):

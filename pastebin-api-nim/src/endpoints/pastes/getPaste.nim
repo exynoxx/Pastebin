@@ -17,6 +17,5 @@ func pasteJson(p: Paste): string =
     })
 
 proc handleGetPaste*(ctx: Ctx) =
-    let p = selectPaste(ctx.params[0])
-    if p.isNone: ctx.respondError(404, "Paste not found")
-    else: ctx.req.respond(200, pasteJson(p.get))
+    let p = fetchOr404(ctx, selectPaste(ctx.params[0]), "Paste not found")
+    ctx.req.respond(200, pasteJson(p))

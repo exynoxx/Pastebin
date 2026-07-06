@@ -5,11 +5,7 @@ import ../context
 import ../../types, ../../db, ../../blobstore
 
 proc handleRawPaste*(ctx: Ctx) =
-    let po = selectPaste(ctx.params[0])
-    if po.isNone:
-        ctx.respondError(404, "Paste not found")
-        return
-    let p = po.get
+    let p = fetchOr404(ctx, selectPaste(ctx.params[0]), "Paste not found")
     if p.blobId.len > 0 and blobExists(p.blobId):
         ctx.req.respondFile(blobPath(p.blobId), "text/plain; charset=utf-8",
             rangeHeader = ctx.req.header("Range"))

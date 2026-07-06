@@ -6,10 +6,6 @@ import ../../types
 import downloadFile
 
 proc handleViewFile*(ctx: Ctx) =
-    let d = resolveDownload(ctx.params[0])
-    if d.isNone:
-        ctx.respondError(404, "File not found")
-        return
-    let dd = d.get
+    let dd = fetchOr404(ctx, resolveDownload(ctx.params[0]), "File not found")
     ctx.req.respondFile(dd.blobPath, dd.contentType,
         rangeHeader = ctx.req.header("Range"), noSniff = true)

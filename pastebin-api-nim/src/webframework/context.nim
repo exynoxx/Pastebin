@@ -32,3 +32,25 @@ proc respondError*(req: Request, code: int, msg: string) =
 
 proc respondError*[E](ctx: Ctx[E], code: int, msg: string) =
     ctx.req.respond(code, errorJson(msg))
+
+# ---- handler control-flow templates ----------------------------------------
+# These early-`return` from the enclosing handler, so they must be templates, not procs.
+# `isNone`/`get` are resolved at the call site (every handler using fetchOr404 imports std/options).
+
+template fetchOr404*(ctx, opt, msg: untyped): untyped =
+    ## Yield the value inside an `Option`, or respond 404 with `msg` and return from the handler.
+    let optVal = opt
+    if optVal.isNone:
+        ctx.respondError(404, msg)
+        return
+    optVal.get
+
+template parseJsonBodyOr400*(ctx: untyped): JsonNode =
+    ## Parse the request body as JSON, or respond 400 and return from the handler.
+    var node: JsonNode
+    try:
+        node = parseJson(ctx.req.bodyString())
+    except CatchableError:
+        ctx.respondError(400, "Invalid request body")
+        return
+    node

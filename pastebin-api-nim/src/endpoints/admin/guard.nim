@@ -55,22 +55,18 @@ proc sweep(nowSec: int64) =
 proc adminPrecheck(ip: string): AdminGate =
     ## Call BEFORE validating the token. Returns lockedOut when the IP is inside its cooldown.
     let nowSec = getTime().toUnix()
-    acquire(gLock)
-    try:
+    withLock gLock:
         sweep(nowSec)
         if ip in gFails:
             let st = gFails[ip]
             st.lastSeen = nowSec
             if nowSec < st.lockedUntil:
                 result = AdminGate(lockedOut: true, retryAfterSeconds: int(st.lockedUntil - nowSec))
-    finally:
-        release(gLock)
 
 proc registerAdminFailure(ip: string) =
     ## Record a failed attempt and escalate the cooldown (doubling, capped at MaxCooldownSec).
     let nowSec = getTime().toUnix()
-    acquire(gLock)
-    try:
+    withLock gLock:
         if ip notin gFails:
             gFails[ip] = IpFail()
         let st = gFails[ip]
@@ -80,16 +76,11 @@ proc registerAdminFailure(ip: string) =
         for _ in 2 .. st.fails:
             cd = min(cd * 2, MaxCooldownSec)
         st.lockedUntil = nowSec + cd
-    finally:
-        release(gLock)
 
 proc clearAdminFailures(ip: string) =
     ## Reset an IP's counter after a successful auth.
-    acquire(gLock)
-    try:
+    withLock gLock:
         gFails.del ip
-    finally:
-        release(gLock)
 
 func constantTimeEq(a, b: string): bool =
     ## Length-checked constant-time compare: no early-out on the first differing byte, so a

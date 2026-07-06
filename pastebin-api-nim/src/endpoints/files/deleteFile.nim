@@ -5,11 +5,7 @@ import ../context
 import ../../types, ../../db, ../../blobstore
 
 proc handleDeleteFile*(ctx: Ctx) =
-    let fo = selectFile(ctx.params[0])
-    if fo.isNone:
-        ctx.respondError(404, "File not found")
-        return
-    let f = fo.get
+    let f = fetchOr404(ctx, selectFile(ctx.params[0]), "File not found")
     if f.blobId.len > 0:
         discard deleteBlob(f.blobId)
     if deleteFileRow(ctx.params[0]):

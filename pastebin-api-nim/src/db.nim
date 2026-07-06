@@ -103,11 +103,8 @@ proc conn(): DbConn =
 
 template withWriteLock(body: untyped): untyped =
     ## Serialise writers process-wide (single-writer WAL discipline).
-    acquire(gWriteLock)
-    try:
+    withLock gWriteLock:
         body
-    finally:
-        release(gWriteLock)
 
 # ---- typed operations (the public reader API) ------------------------------
 # Everything below returns/accepts domain types from types.nim; no SQL, row, or

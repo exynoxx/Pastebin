@@ -9,7 +9,7 @@ import ../webframework/context as fctx
 import ../config
 
 export httpserver, config
-export fctx.errorJson, fctx.respondError
+export fctx.errorJson, fctx.respondError, fctx.fetchOr404, fctx.parseJsonBodyOr400
 
 type
     Ctx* = fctx.Ctx[AppConfig]

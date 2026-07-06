@@ -7,19 +7,10 @@ import ../../types, ../../db, ../../apperrors, ../../ratelimit, ../../timeutil
 import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =
-    var root: JsonNode
-    try:
-        root = parseJson(ctx.req.bodyString())
-    except CatchableError:
-        ctx.respondError(400, "Invalid request body")
-        return
+    let root = parseJsonBodyOr400(ctx)
     if ctx.rejectPasteLimit(checkPasteCreate(ctx.ip)): return
     let fileId = root{"fileId"}.getStr("")
-    let fo = selectFile(fileId)
-    if fo.isNone:
-        ctx.respondError(404, "File not found")
-        return
-    let f = fo.get
+    let f = fetchOr404(ctx, selectFile(fileId), "File not found")
     let reqTitle = root{"title"}.getStr("")
     let title = if reqTitle.strip().len == 0: f.originalName else: reqTitle.strip()
     let visibility = root{"visibility"}.getStr("public")

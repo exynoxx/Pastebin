@@ -69,12 +69,7 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
     p
 
 proc handleCreatePaste*(ctx: Ctx) =
-    var root: JsonNode
-    try:
-        root = parseJson(ctx.req.bodyString())
-    except CatchableError:
-        ctx.respondError(400, "Invalid request body")
-        return
+    let root = parseJsonBodyOr400(ctx)
     let content = root{"content"}.getStr("")
     if content.strip().len == 0:
         ctx.respondError(400, "Content cannot be empty")

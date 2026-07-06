@@ -33,6 +33,9 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
   parallel structure.
 - **Reuse before you write.** Prefer the standard library and existing common/shared helpers over
   hand-rolled equivalents. Don't reinvent what already exists — simpler, cleaner code wins.
+- **Comment the non-obvious, not the obvious.** The code is mostly self-explanatory — don't narrate
+  what it plainly does. Do add a concise comment where a concept or gotcha isn't obvious, or where a
+  high-level detail needs describing (the *why*, an invariant, a subtle edge case).
 
 ## Backend (`pastebin-api-nim/`) — the deployed one
 

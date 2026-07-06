@@ -7,12 +7,10 @@ import
     admin/listPastes, admin/deletePaste
 
 proc registerRoutes*(): RouteTable =
-    # Pastes
     result.get(   "/api/pastes",                       handleRecentPastes)
     result.post(  "/api/pastes",                       handleCreatePaste)
     result.get(   "/api/pastes/{id}",                  handleGetPaste)
     result.get(   "/api/pastes/{id}/raw",              handleRawPaste)
-    # Files
     result.post(  "/api/files/upload",                 handleUploadFile,          upload = true)
     result.post(  "/api/files/upload-folder",          handleUploadFolder,        upload = true)
     result.post(  "/api/files/create-paste-from-file", handleCreatePasteFromFile)

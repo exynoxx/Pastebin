@@ -9,7 +9,8 @@ serialize(PasteSummary)
 func summariesJson(items: seq[PasteSummary]): string =
     ## Assemble the array from the macro-generated per-item node builder.
     var arr = newJArray()
-    for s in items: arr.add pasteSummaryNode(s)
+    for s in items: 
+        arr.add pasteSummaryNode(s)
     $arr
 
 const

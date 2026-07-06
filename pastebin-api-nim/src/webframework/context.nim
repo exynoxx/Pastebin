@@ -15,7 +15,7 @@ export httpserver
 
 type
     Ctx*[E] = object
-        req*: Request         ## the HTTP request being served
+        req*: Request
         ip*: string           ## resolved client identifier (rate-limit / quota / owner bucket)
         params*: seq[string]  ## path parameters, in pattern order (e.g. the {id})
         cfg*: E               ## app-supplied dependencies (e.g. the effective AppConfig)

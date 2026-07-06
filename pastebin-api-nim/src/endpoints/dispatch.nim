@@ -22,8 +22,6 @@ var
     gRoutes: RouteTable   ## built once at startup (initRoutes), only read on the worker threads.
     gCfg: AppConfig       ## effective config, likewise write-once before the workers start.
 
-# ---- registration DSL (used by routes.nim) ---------------------------------
-
 proc get*(r: var RouteTable, pattern: string, handler: EndpointHandler) =
     r.add("GET", pattern, RoutePayload(handler: handler, upload: false))
 
@@ -37,8 +35,6 @@ proc initRoutes*(r: RouteTable, cfg: AppConfig) =
     ## Install the route table + config. Call once at startup, before the workers start.
     gRoutes = r
     gCfg = cfg
-
-# ---- app-specific dispatch pieces (injected into the framework) -------------
 
 proc notFound(ctx: Ctx) =
     ctx.respondError(404, "Not found")

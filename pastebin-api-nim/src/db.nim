@@ -122,7 +122,6 @@ proc insertPaste*(p: Paste, ownerIp: string) =
                 $p.createdAt, p.blobId, ownerIp, p.visibility)
 
 proc selectPaste*(id: string): Option[Paste] =
-    ## Fetch a single paste by id, or none if it doesn't exist.
     let rows = conn().getAllRows(sql"""
         SELECT id, title, content, size, is_truncated, created_at, blob_id, visibility
         FROM pastes WHERE id = ? LIMIT 1;
@@ -187,7 +186,6 @@ proc insertFile*(f: StoredFile, ownerIp: string) =
         """, f.id, f.originalName, f.contentType, $f.size, $f.uploadedAt, f.blobId, ownerIp, f.visibility)
 
 proc selectFile*(id: string): Option[StoredFile] =
-    ## Fetch a single file's metadata by id, or none if it doesn't exist.
     let rows = conn().getAllRows(sql"""
         SELECT id, original_name, content_type, size, uploaded_at, blob_id, visibility
         FROM files WHERE id = ? LIMIT 1;

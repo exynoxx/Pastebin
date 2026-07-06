@@ -33,7 +33,6 @@ function rateLimitMessage(error) {
   return `⏳ ${base}${wait}`;
 }
 
-// Common Components
 function Alert({ message, onCopy, onView }) {
   if (!message) return null;
 
@@ -61,7 +60,6 @@ function Alert({ message, onCopy, onView }) {
   );
 }
 
-// File Upload Components
 function FileUploadSection({ onFileUpload, onFolderUpload, loading }) {
   const handleFileInputChange = (e) => {
     const files = Array.from(e.target.files);
@@ -154,7 +152,6 @@ function FileInfo({ uploadedFile, onDownload, onClear }) {
   );
 }
 
-// Paste Form Component
 function PasteForm({ onPasteCreated }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -189,15 +186,12 @@ function PasteForm({ onPasteCreated }) {
       const uploadResult = response.data;
       setUploadedFile(uploadResult);
 
-      // Auto-set title if empty
       if (!title.trim()) {
         setTitle(file.name);
       }
 
-      // Set content to file reference with metadata only
       setContent(`[FILE ATTACHMENT]\nFile: ${uploadResult.originalName}\nSize: ${(uploadResult.size / 1024).toFixed(2)} KB\nType: ${uploadResult.contentType}\nUploaded: ${new Date(uploadResult.uploadedAt).toLocaleString()}\n\nFile ID: ${uploadResult.id}`);
 
-      // Show success message with link to file paste
       const fileUrl = `${window.location.origin}/files/${uploadResult.id}`;
       setMessage({
         type: 'success',
@@ -280,15 +274,13 @@ function PasteForm({ onPasteCreated }) {
       let pasteResponse;
 
       if (uploadedFile) {
-        // Create paste from uploaded file
         pasteResponse = await axios.post('/files/create-paste-from-file', {
           fileId: uploadedFile.id,
           title: title.trim(),
-          includeContent: false, // Never include content, only metadata
+          includeContent: false, // metadata only, never the file's contents
           visibility
         });
       } else {
-        // Regular paste creation
         pasteResponse = await axios.post('/pastes', {
           title: title.trim(),
           content: content,
@@ -304,13 +296,11 @@ function PasteForm({ onPasteCreated }) {
         id: pasteResponse.data.id
       });
 
-      // Reset form
       setTitle('');
       setContent('');
       setVisibility('public');
       setUploadedFile(null);
 
-      // Refresh recent pastes
       if (onPasteCreated) {
         onPasteCreated();
       }
@@ -362,7 +352,6 @@ function PasteForm({ onPasteCreated }) {
         responseType: 'blob'
       });
 
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -384,7 +373,7 @@ function PasteForm({ onPasteCreated }) {
   };
 
   const viewPaste = (id) => {
-    // Check if it's a file ID or paste ID based on the URL structure
+    // message.url distinguishes a file paste from a text paste
     if (message && message.url.includes('/files/')) {
       navigate(`/files/${id}`);
     } else {
@@ -450,7 +439,6 @@ function PasteForm({ onPasteCreated }) {
             loading={loading}
           />
 
-          {/* Drag and Drop Textarea */}
           <div
             className={`textarea-container ${isDragOver ? 'drag-over' : ''}`}
             onDrop={handleDrop}
@@ -483,7 +471,6 @@ function PasteForm({ onPasteCreated }) {
 }
 
 
-// Main Route Components
 function Home() {
   const [recentPastes, setRecentPastes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -565,7 +552,6 @@ function FileView() {
   return <FilePasteView file={file} navigate={navigate} />;
 }
 
-// Main App Component
 function App() {
   return (
     <Router>

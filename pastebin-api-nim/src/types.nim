@@ -45,7 +45,7 @@ type
     DownloadData* = object
         contentType*: string
         fileName*: string
-        blobPath*: string   ## on-disk blob path
+        blobPath*: string
 
 func normalizeVisibility*(v: string): string =
     ## The single source of truth for the two-valued visibility field: anything that isn't the

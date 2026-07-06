@@ -9,25 +9,8 @@ import ../context
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids
 
-func deriveTitle(content: string, maxChars: int): string =
-    ## First non-empty line, trimmed and capped at maxChars chars ("…" appended when cut).
-    var firstLine = ""
-    for rawLine in content.split('\n'):
-        let line = rawLine.strip()
-        if line.len > 0:
-            firstLine = line
-            break
-    if firstLine.len == 0:
-        return "Untitled"
-    if firstLine.runeLen <= maxChars:
-        return firstLine
-    firstLine.runeSubStr(0, maxChars).strip(leading = false, trailing = true) & "…"
-
-func buildPreview(content: string, previewChars: int): string =
-    if content.runeLen <= previewChars:
-        return content
-    content.runeSubStr(0, previewChars) &
-        "\n\n… (truncated — open the raw view for the full content)"
+func deriveTitle(content: string, maxChars: int): string
+func buildPreview(content: string, previewChars: int): string
 
 proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string): Paste =
     ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) on oversize/over-quota.
@@ -89,3 +72,23 @@ proc handleCreatePaste*(ctx: Ctx) =
         ctx.req.respond(200, $(%*{"id": p.id}))
     except PayloadTooLargeError as e:
         ctx.respondError(413, e.msg)
+
+func deriveTitle(content: string, maxChars: int): string =
+    ## First non-empty line, trimmed and capped at maxChars chars ("…" appended when cut).
+    var firstLine = ""
+    for rawLine in content.split('\n'):
+        let line = rawLine.strip()
+        if line.len > 0:
+            firstLine = line
+            break
+    if firstLine.len == 0:
+        return "Untitled"
+    if firstLine.runeLen <= maxChars:
+        return firstLine
+    firstLine.runeSubStr(0, maxChars).strip(leading = false, trailing = true) & "…"
+
+func buildPreview(content: string, previewChars: int): string =
+    if content.runeLen <= previewChars:
+        return content
+    content.runeSubStr(0, previewChars) &
+        "\n\n… (truncated — open the raw view for the full content)"

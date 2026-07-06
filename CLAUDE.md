@@ -36,6 +36,10 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
 - **Comment the non-obvious, not the obvious.** The code is mostly self-explanatory — don't narrate
   what it plainly does. Do add a concise comment where a concept or gotcha isn't obvious, or where a
   high-level detail needs describing (the *why*, an invariant, a subtle edge case).
+- **Public API first, private helpers last.** In a handler file, order top-to-bottom: `const` blocks
+  and template/macro invocations (e.g. `serialize(...)`), then the public handler, then private
+  helper procs/funcs at the bottom. Since Nim requires declaration-before-use, add a one-line forward
+  declaration near the top for any private helper a public proc calls.
 
 ## Backend (`pastebin-api/`) — the deployed one
 

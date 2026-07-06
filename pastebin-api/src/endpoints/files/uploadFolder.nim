@@ -10,24 +10,8 @@ import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../ids, ../../webframework/multipart
 import zippy/ziparchives
 
-func zipEntryName(entry: MultipartEntry): string =
-    ## Normalise a browser-supplied relative path to a safe forward-slash zip entry name.
-    ## Strips drive/leading separators and any "."/".." segments (path-traversal safe).
-    let raw = if entry.filename.strip().len == 0: entry.name else: entry.filename
-    var parts: seq[string]
-    for seg in raw.replace('\\', '/').split('/'):
-        if seg.len > 0 and seg != "." and seg != "..":
-            parts.add seg
-    if parts.len > 0: parts.join("/") else: "file"
-
-proc zipFileName(folderName: string): string =
-    var name = if folderName.strip().len == 0: "folder" else: folderName.strip()
-    # Keep to a single safe path segment; the client may pass a nested path.
-    var last = "folder"
-    for seg in name.replace('\\', '/').split('/'):
-        if seg.len > 0: last = seg
-    name = last
-    if name.toLowerAscii().endsWith(".zip"): name else: name & ".zip"
+func zipEntryName(entry: MultipartEntry): string
+proc zipFileName(folderName: string): string
 
 proc handleUploadFolder*(ctx: Ctx) =
     var entries: seq[MultipartEntry]
@@ -81,3 +65,22 @@ proc handleUploadFolder*(ctx: Ctx) =
         ctx.respondError(500, "Folder upload failed: " & e.msg)
     finally:
         cleanupEntries(entries)
+
+func zipEntryName(entry: MultipartEntry): string =
+    ## Normalise a browser-supplied relative path to a safe forward-slash zip entry name.
+    ## Strips drive/leading separators and any "."/".." segments (path-traversal safe).
+    let raw = if entry.filename.strip().len == 0: entry.name else: entry.filename
+    var parts: seq[string]
+    for seg in raw.replace('\\', '/').split('/'):
+        if seg.len > 0 and seg != "." and seg != "..":
+            parts.add seg
+    if parts.len > 0: parts.join("/") else: "file"
+
+proc zipFileName(folderName: string): string =
+    var name = if folderName.strip().len == 0: "folder" else: folderName.strip()
+    # Keep to a single safe path segment; the client may pass a nested path.
+    var last = "folder"
+    for seg in name.replace('\\', '/').split('/'):
+        if seg.len > 0: last = seg
+    name = last
+    if name.toLowerAscii().endsWith(".zip"): name else: name & ".zip"

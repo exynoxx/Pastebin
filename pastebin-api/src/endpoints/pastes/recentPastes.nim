@@ -6,16 +6,11 @@ import ../../types, ../../db, ../../json
 
 serialize(PasteSummary)
 
-func summariesJson(items: seq[PasteSummary]): string =
-    ## Assemble the array from the macro-generated per-item node builder.
-    var arr = newJArray()
-    for s in items: 
-        arr.add pasteSummaryNode(s)
-    $arr
-
 const
     DefaultLimit = 10
     MaxLimit = 100
+
+func summariesJson(items: seq[PasteSummary]): string
 
 proc handleRecentPastes*(ctx: Ctx) =
     var limit = DefaultLimit
@@ -27,3 +22,10 @@ proc handleRecentPastes*(ctx: Ctx) =
     # unbounded — so an unclamped ?limit=-1 would dump the entire pastes+files union.
     limit = max(1, min(limit, MaxLimit))
     ctx.req.respond(200, summariesJson(selectRecentSummaries(limit)))
+
+func summariesJson(items: seq[PasteSummary]): string =
+    ## Assemble the array from the macro-generated per-item node builder.
+    var arr = newJArray()
+    for s in items:
+        arr.add pasteSummaryNode(s)
+    $arr

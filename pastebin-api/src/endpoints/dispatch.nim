@@ -31,6 +31,29 @@ proc post*(r: var RouteTable, pattern: string, handler: EndpointHandler, upload 
 proc delete*(r: var RouteTable, pattern: string, handler: EndpointHandler) =
     r.add("DELETE", pattern, RoutePayload(handler: handler, upload: false))
 
+# Param-binding overloads: deliver a route's `{param}` captures as explicit args after `ctx`, so a
+# handler for `/…/{id}` can take `(ctx: Ctx, id: string)` instead of reaching into `ctx.params`.
+# These must be templates, not procs: each expands around the concrete handler symbol at the call
+# site, so the generated `proc(ctx)` wrapper references a global (no closure capture) and stays a
+# plain nimcall handler the route table can store. Args bind in pattern order.
+template get*(r: var RouteTable, pattern: string, handler: proc(ctx: Ctx, id: string) {.nimcall.}) =
+    r.get(pattern, proc(ctx: Ctx) {.nimcall.} = handler(ctx, ctx.params[0]))
+
+template get*(r: var RouteTable, pattern: string, handler: proc(ctx: Ctx, a, b: string) {.nimcall.}) =
+    r.get(pattern, proc(ctx: Ctx) {.nimcall.} = handler(ctx, ctx.params[0], ctx.params[1]))
+
+template post*(r: var RouteTable, pattern: string, handler: proc(ctx: Ctx, id: string) {.nimcall.}, upload = false) =
+    r.post(pattern, proc(ctx: Ctx) {.nimcall.} = handler(ctx, ctx.params[0]), upload)
+
+template post*(r: var RouteTable, pattern: string, handler: proc(ctx: Ctx, a, b: string) {.nimcall.}, upload = false) =
+    r.post(pattern, proc(ctx: Ctx) {.nimcall.} = handler(ctx, ctx.params[0], ctx.params[1]), upload)
+
+template delete*(r: var RouteTable, pattern: string, handler: proc(ctx: Ctx, id: string) {.nimcall.}) =
+    r.delete(pattern, proc(ctx: Ctx) {.nimcall.} = handler(ctx, ctx.params[0]))
+
+template delete*(r: var RouteTable, pattern: string, handler: proc(ctx: Ctx, a, b: string) {.nimcall.}) =
+    r.delete(pattern, proc(ctx: Ctx) {.nimcall.} = handler(ctx, ctx.params[0], ctx.params[1]))
+
 proc initRoutes*(r: RouteTable, cfg: AppConfig) =
     ## Install the route table + config. Call once at startup, before the workers start.
     gRoutes = r

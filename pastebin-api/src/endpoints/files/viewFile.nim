@@ -5,7 +5,7 @@ import ../context
 import ../../types
 import downloadFile
 
-proc handleViewFile*(ctx: Ctx) =
-    let dd = fetchOr404(ctx, resolveDownload(ctx.params[0]), "File not found")
+proc handleViewFile*(ctx: Ctx, id: string) =
+    let dd = fetchOr404(ctx, resolveDownload(id), "File not found")
     ctx.req.respondFile(dd.blobPath, dd.contentType,
         rangeHeader = ctx.req.header("Range"), noSniff = true)

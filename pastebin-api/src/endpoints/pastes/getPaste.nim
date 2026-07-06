@@ -6,6 +6,6 @@ import ../../types, ../../db, ../../json
 
 serialize(Paste, omit = [blobId])
 
-proc handleGetPaste*(ctx: Ctx) =
-    let p = fetchOr404(ctx, selectPaste(ctx.params[0]), "Paste not found")
+proc handleGetPaste*(ctx: Ctx, id: string) =
+    let p = fetchOr404(ctx, selectPaste(id), "Paste not found")
     ctx.req.respond(200, pasteJson(p))

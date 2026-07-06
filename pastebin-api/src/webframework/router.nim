@@ -20,7 +20,7 @@ proc splitPath*(p: string): seq[string] =
     p.strip(chars = {'/'}).split('/')
 
 proc isParam(seg: string): bool =
-    seg.len >= 2 and seg[0] == '{' and seg[^1] == '}'
+    seg.len >= 2 and seg[0] == '{' and seg.endsWith('}')
 
 proc add*[P](r: var Router[P], verb, pattern: string, payload: P) =
     ## Register a route. Call at startup, before the workers start.

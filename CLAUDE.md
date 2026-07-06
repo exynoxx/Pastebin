@@ -22,6 +22,17 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
 - **`docs/`** — `SECURITY.md`, `PERFORMANCE.md`, `NTFY_NOTIFICATIONS.md`, `visibility-plan.md`.
 - **`rpi-omv-setup.md`** — detailed reference for the physical Pi / OpenMediaVault box.
 
+## Code conventions
+
+- **Keep a feature together.** All the code for one feature lives in a single file, or — when it
+  spans layers — in a single **vertical slice** (controller → service → store for that feature).
+  Don't scatter one feature's logic across unrelated files.
+- **Follow the existing onion structure.** Dependencies point inward (controllers → services →
+  stores/domain), never the reverse. New code slots into the current layering; don't invent a
+  parallel structure.
+- **Reuse before you write.** Prefer the standard library and existing common/shared helpers over
+  hand-rolled equivalents. Don't reinvent what already exists — simpler, cleaner code wins.
+
 ## Backend components (`pastebin-api/`)
 
 **Controllers** (`controllers/`)

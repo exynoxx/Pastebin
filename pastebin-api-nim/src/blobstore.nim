@@ -6,8 +6,6 @@
 
 import std/[os, sysrand]
 
-const BufferSize = 1 shl 20 # 1 MB, matching BlobStore.cs
-
 var gRoot: string
 
 proc initBlobStore*(root: string) =
@@ -47,33 +45,17 @@ proc saveFromString*(data: string): tuple[blobId: string, size: int64] =
     let blobId = newBlobId()
     let finalPath = pathFor(blobId, ensureDir = true)
     let tmpPath = finalPath & ".tmp"
-    block:
-        let f = open(tmpPath, fmWrite)
-        defer: f.close()
-        if data.len > 0:
-            discard f.writeBuffer(unsafeAddr data[0], data.len)
+    writeFile(tmpPath, data)
     moveFile(tmpPath, finalPath) # same dir => atomic rename
     (blobId, data.len.int64)
 
 proc saveFromFile*(srcPath: string): tuple[blobId: string, size: int64] =
-    ## Stream an existing file (e.g. the spilled request body or a staged zip) into a new blob,
-    ## copying in bounded chunks so memory stays flat regardless of size.
+    ## Stream an existing file (e.g. the spilled request body or a staged zip) into a new blob.
+    ## copyFile streams in bounded chunks internally, so memory stays flat regardless of size.
     let blobId = newBlobId()
     let finalPath = pathFor(blobId, ensureDir = true)
     let tmpPath = finalPath & ".tmp"
-    var total: int64 = 0
-    block:
-        let src = open(srcPath, fmRead)
-        defer: src.close()
-        let dst = open(tmpPath, fmWrite)
-        defer: dst.close()
-        var buf = newString(BufferSize)
-        while true:
-            let n = src.readBuffer(addr buf[0], BufferSize)
-            if n <= 0: break
-            var written = 0
-            while written < n:
-                written += dst.writeBuffer(addr buf[written], n - written)
-            total += n
+    copyFile(srcPath, tmpPath)
+    let total = getFileSize(tmpPath)
     moveFile(tmpPath, finalPath)
     (blobId, total)

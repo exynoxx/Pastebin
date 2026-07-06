@@ -83,14 +83,11 @@ proc bodyFile*(req: Request): string =
     req.bodyFilePath
 
 proc queryParam*(req: Request, name: string): string =
-    ## Value of a query parameter, or "" if absent. Minimal '+'/%xx handling.
+    ## Value of a query parameter, or "" if absent. decodeQuery handles '+'/%xx.
     if req.rawQuery.len == 0: return ""
-    for pair in req.rawQuery.split('&'):
-        let eq = pair.find('=')
-        let k = if eq >= 0: pair[0 ..< eq] else: pair
+    for (k, v) in decodeQuery(req.rawQuery):
         if k == name:
-            let raw = if eq >= 0: pair[eq + 1 .. ^1] else: ""
-            return raw.replace("+", " ").decodeUrl()
+            return v
     ""
 
 # ---- response helpers ------------------------------------------------------

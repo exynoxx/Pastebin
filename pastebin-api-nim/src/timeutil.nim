@@ -6,7 +6,7 @@
 ## opaque ISO strings everywhere on the read path, and generate the SAME format for new rows so
 ## the shared DB stays readable by the .NET backend on rollback and lexicographic ORDER BY holds.
 
-import std/times
+import std/[times, strutils]
 
 proc nowIso*(): string =
     ## Current UTC time as .NET "o" format: yyyy-MM-ddTHH:mm:ss.fffffffZ (7 fractional digits).
@@ -16,9 +16,7 @@ proc nowIso*(): string =
     let ticks = dt.nanosecond div 100
     result = dt.format("yyyy-MM-dd'T'HH:mm:ss")
     result.add '.'
-    var frac = $ticks
-    while frac.len < 7: frac = "0" & frac
-    result.add frac
+    result.add intToStr(ticks, 7)   # ticks in 0..9_999_999, zero-padded to 7 digits
     result.add 'Z'
 
 func isoToUniversal*(iso: string): string =

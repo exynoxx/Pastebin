@@ -13,7 +13,7 @@
 
 import std/[locks, os, strutils, options]
 import db_connector/db_sqlite
-import types, timeutil
+import types
 
 var
     gDbPath: string
@@ -44,17 +44,6 @@ proc addColumnIfMissing(db: DbConn, table, column, typ: string) =
     ## SQLite has no "ADD COLUMN IF NOT EXISTS"; add only when absent (idempotent migration).
     if db.columnExists(table, column): return
     db.exec(sql("ALTER TABLE " & table & " ADD COLUMN " & column & " " & typ & ";"))
-
-proc migrateTimestampsToMillis(db: DbConn) =
-    ## Older DBs stored created_at/uploaded_at as .NET ISO-8601 text. Rewrite any text-typed
-    ## timestamp cell to epoch-millis (SQLite stores type per value, so `typeof` finds the
-    ## stragglers). Idempotent: integer cells are already migrated and skipped.
-    for (tbl, col) in [("pastes", "created_at"), ("files", "uploaded_at")]:
-        let rows = db.getAllRows(sql(
-            "SELECT id, " & col & " FROM " & tbl & " WHERE typeof(" & col & ") = 'text';"))
-        for r in rows:
-            db.exec(sql("UPDATE " & tbl & " SET " & col & " = ? WHERE id = ?;"),
-                $isoToMillis(r[1]), r[0])
 
 proc initDb*(sqlitePath: string) =
     ## Run once at startup: create the data dir, open a bootstrap connection, set PRAGMAs and
@@ -104,8 +93,6 @@ proc initDb*(sqlitePath: string) =
 
     db.exec(sql"CREATE INDEX IF NOT EXISTS ix_pastes_owner_ip ON pastes (owner_ip);")
     db.exec(sql"CREATE INDEX IF NOT EXISTS ix_files_owner_ip ON files (owner_ip);")
-
-    db.migrateTimestampsToMillis()
 
 proc conn(): DbConn =
     ## The calling worker thread's lazily-opened connection.

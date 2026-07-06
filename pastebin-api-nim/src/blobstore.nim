@@ -1,6 +1,6 @@
-## Filesystem blob store, mirroring pastebin-api/services/BlobStore.cs.
+## Filesystem blob store.
 ##
-## blobId = 32-char lowercase hex (GUID "N" equivalent). Two-char sharding keeps any single
+## blobId = 32-char lowercase hex. Two-char sharding keeps any single
 ## directory small. Writes go to "<final>.tmp" then rename → publish atomically so an aborted
 ## upload never leaves a half-written blob. Copies stream in bounded chunks (flat memory).
 
@@ -12,7 +12,7 @@ proc initBlobStore*(root: string) =
     gRoot = root
     createDir(root)
 
-proc randomHex*(byteCount: int): string =
+proc randomHex(byteCount: int): string =
     ## `byteCount` CSPRNG bytes rendered as lowercase hex (2 chars per byte).
     let bytes = urandom(byteCount)
     const hexChars = "0123456789abcdef"
@@ -22,7 +22,7 @@ proc randomHex*(byteCount: int): string =
         result.add hexChars[int(b and 0x0f)]
 
 proc newBlobId*(): string =
-    ## 16 random bytes -> 32 lowercase hex chars (like Guid.NewGuid().ToString("N")).
+    ## 16 random bytes -> 32 lowercase hex chars.
     randomHex(16)
 
 proc pathFor(blobId: string, ensureDir = false): string =

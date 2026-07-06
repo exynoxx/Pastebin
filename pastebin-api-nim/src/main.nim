@@ -1,4 +1,4 @@
-## Entry point for the Nim Pastebin backend — a drop-in replacement for the .NET pastebin-api.
+## Entry point for the Nim Pastebin backend.
 ## Wires config -> stores/services -> route table, then hands off to the framework's `serve`, which
 ## owns the HTTP server + per-request glue. Listens on port 8080 behind nginx.
 

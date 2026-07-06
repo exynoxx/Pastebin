@@ -1,4 +1,4 @@
-## Fire-and-forget ntfy.sh push notifier, mirroring pastebin-api/services/NtfyNotifier.cs.
+## Fire-and-forget ntfy.sh push notifier.
 ## Silent no-op unless NTFY_TOPIC is set. A single background thread drains a channel and does
 ## one JSON POST per event with a 5s timeout, swallowing all errors so a slow/unreachable ntfy
 ## can never block or fail a request.
@@ -16,7 +16,7 @@ var
     gEnabled: bool
 
 func formatSize(bytes: int64): string =
-    ## Mirrors NtfyNotifier.FormatSize: B/KB/.../TB, "0.#" for scaled values.
+    ## B/KB/.../TB, with one optional decimal ("0.#") for scaled values.
     const units = ["B", "KB", "MB", "GB", "TB"]
     var size = bytes.float
     var unit = 0

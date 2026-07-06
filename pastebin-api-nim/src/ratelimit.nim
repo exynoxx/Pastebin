@@ -4,8 +4,7 @@
 ## Two policies, two entry points, kept distinct because they enforce different things:
 ##
 ## 1. `tryAcquire` — runs on EVERY request (via the `rateLimit` middleware below, composed in
-##    endpoints/dispatch.nim), mirroring the chained
-##    limiters in pastebin-api/program.cs. Three limiters apply, in order:
+##    endpoints/dispatch.nim). Three chained limiters apply, in order:
 ##      a. per-IP sliding window   (perIpPerMinute,  1 min, 6 segments)
 ##      b. global sliding window   (globalPerMinute, 1 min, 6 segments)
 ##      c. global concurrency cap  (globalConcurrency, no queue)
@@ -13,8 +12,8 @@
 ##    -> the route layer answers 503 + Retry-After: 10. On success the caller MUST release the
 ##    concurrency slot when the request finishes.
 ##
-## 2. `checkPasteCreate` — runs only when creating a paste, mirroring
-##    pastebin-api/services/PasteRateGuard.cs. Normal mode: up to burstLimit pastes within a rolling
+## 2. `checkPasteCreate` — runs only when creating a paste.
+##    Normal mode: up to burstLimit pastes within a rolling
 ##    windowSeconds; the paste that would exceed that is rejected AND trips a penalty box — for the
 ##    next penaltySeconds the IP is limited to one paste per penaltyIntervalSeconds. Rejection ->
 ##    the route layer answers 429 + Retry-After (via `rejectPasteLimit` below).

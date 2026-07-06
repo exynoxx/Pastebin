@@ -4,7 +4,7 @@ import std/[json, options]
 import ../context
 import ../../types, ../../db, ../../json
 
-# Paste with [JsonIgnore] BlobId omitted. camelCase to match ASP.NET's default output.
+# Paste with internal blobId omitted from the JSON.
 serialize(Paste, omit = [blobId])
 
 proc handleGetPaste*(ctx: Ctx) =

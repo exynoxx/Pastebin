@@ -15,19 +15,19 @@ type
         maxStorageBytesPerIp*: int64   # MAX_STORAGE_BYTES_PER_IP 100 MB
         untitledTitleMaxChars*: int    # fixed 40
 
-        # --- framework rate limits (program.cs) ---
+        # --- framework rate limits ---
         perIpPerMinute*: int           # RATE_LIMIT_PER_IP_PER_MIN     120
         uploadsPerMinute*: int         # RATE_LIMIT_UPLOADS_PER_MIN    10
         globalConcurrency*: int        # RATE_LIMIT_GLOBAL_CONCURRENCY 50
         globalPerMinute*: int          # RATE_LIMIT_GLOBAL_PER_MIN     600
 
-        # --- paste burst / penalty box (PasteRateGuard) ---
+        # --- paste burst / penalty box ---
         pasteBurstLimit*: int          # PASTE_BURST_LIMIT          10
         pasteBurstWindowSec*: int      # PASTE_BURST_WINDOW_SEC     60
         pastePenaltySec*: int          # PASTE_PENALTY_SEC          1800
         pastePenaltyIntervalSec*: int  # PASTE_PENALTY_INTERVAL_SEC 60
 
-        # --- ntfy (NtfyNotifier) ---
+        # --- ntfy ---
         ntfyServerUrl*: string         # NTFY_SERVER_URL   https://ntfy.sh
         ntfyTopic*: string             # NTFY_TOPIC        "" => disabled
         publicBaseUrl*: string         # PUBLIC_BASE_URL   "" => links relative/incomplete
@@ -43,7 +43,7 @@ type
         networkLog*: bool              # NETWORK_LOG        default true
 
 proc getLong(key: string, fallback: int64): int64 =
-    ## Mirrors program.cs GetLong: parse or fall back. Invariant/base-10.
+    ## Parse an env var or fall back to a default. Base-10.
     let v = getEnv(key)
     if v.len == 0: return fallback
     try: parseBiggestInt(v.strip())

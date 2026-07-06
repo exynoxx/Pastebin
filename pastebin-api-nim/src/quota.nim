@@ -1,6 +1,7 @@
-## Per-IP storage quota, mirroring pastebin-api/services/StorageQuota.cs.
+## Per-IP storage quota.
 ## Usage = SUM(size) across BOTH pastes and files for owner_ip. Checked BEFORE writing a blob
-## so a rejected upload never orphans bytes. Intentionally non-transactional (TOCTOU), as in .NET.
+## so a rejected upload never orphans bytes. Intentionally non-transactional (TOCTOU): the tiny
+## race window is acceptable for a personal instance.
 
 import std/strformat
 import db, apperrors

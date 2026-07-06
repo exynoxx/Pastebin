@@ -41,7 +41,7 @@ type
         visibility*: string    ## "public" => listed in recent list; "private" => unlisted (direct link only)
         blobId*: string        ## internal. Never emitted in JSON.
 
-    # Result of resolving a downloadable blob/inline paste (mirrors FileDownloadData.cs).
+    # Result of resolving a downloadable blob/inline paste.
     # Either backed by an on-disk blob (dkBlob) or by in-memory bytes (dkInline).
     DownloadKind* = enum dkBlob, dkInline
     DownloadData* = object

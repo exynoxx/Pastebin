@@ -59,7 +59,7 @@ func reason(code: int): string =
 # ---- request helpers -------------------------------------------------------
 
 proc header*(req: Request, name: string): string =
-    ## Case-insensitive header lookup; "" if absent (matches webby/.NET semantics).
+    ## Case-insensitive header lookup; "" if absent (standard HTTP semantics).
     for (k, v) in req.headers:
         if cmpIgnoreCase(k, name) == 0:
             return v
@@ -214,12 +214,6 @@ proc uniqueTempPath(): string =
     inc n
     getTempDir() / ("pb-body-" & $getCurrentProcessId() & "-" &
         $getMonoTime().ticks & "-" & $n & ".tmp")
-
-proc recvInto(sock: Socket, buf: var string): int =
-    ## Reads up to RecvChunk bytes; returns 0 on clean EOF.
-    buf.setLen(RecvChunk)
-    let n = sock.recv(addr buf[0], RecvChunk)
-    if n <= 0: 0 else: n
 
 proc handleConnection(sock: Socket, remote: string) =
     ## Reads exactly one request, dispatches it, cleans up. Never raises.

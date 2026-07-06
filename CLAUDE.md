@@ -14,7 +14,7 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
 ```
 
 - **`pastebin-api-nim/`** — **Nim backend, the deployed one.** Source of truth for all limits,
-  quotas, and storage. (`pastebin-api/` is a non-deployed .NET reference port — see Backend below.)
+  quotas, and storage. (Originally a port of a .NET backend, since removed — see Backend below.)
 - **`pastebin-frontend/`** — React 18 SPA (Create React App / `react-scripts`). `npm run build` → static `/build`.
 - **`nginx/`** — Reverse proxy + static serving. Serves the built SPA, proxies `/api/*` to the API,
   sets `X-Real-IP`/`X-Forwarded-For`, applies `security-headers.conf`. Serves **plain HTTP on :80** —
@@ -36,12 +36,11 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
 
 ## Backend (`pastebin-api-nim/`) — the deployed one
 
-The Pi runs this **Nim** backend (`task build` builds `pastebin-api-nim/Dockerfile`). A parallel
-.NET tree, `pastebin-api/`, was the original reference port — but it is **not deployed** and is not
-kept in step. The Nim backend has since **deliberately diverged** from .NET parity to simplify
-itself (epoch-millis timestamps instead of .NET `"o"` text, `""` instead of JSON `null` for empty
-`contentType`, base62 IDs, `{"id"}`-only create responses), so it is **no longer rollback-compatible**
-with the .NET tree on a shared data disk. Edit the Nim tree to change runtime behavior. Onion
+The Pi runs this **Nim** backend (`task build` builds `pastebin-api-nim/Dockerfile`). It began as a
+drop-in port of a .NET backend, but that .NET tree has been **deleted**, and the Nim backend has
+since **deliberately diverged** from the old .NET wire/storage format to simplify itself (epoch-millis
+timestamps instead of .NET `"o"` text, `""` instead of JSON `null` for empty `contentType`, base62
+IDs, `{"id"}`-only create responses). Edit the Nim tree to change runtime behavior. Onion
 structure under `pastebin-api-nim/src/`:
 
 - `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults, incl. the 3-tier rate

@@ -33,7 +33,7 @@ survey below are stale. What's true now (verified via SSH `2026-07-02`):
 | Name | Image | Restart | Notes |
 |---|---|---|---|
 | `pastebin-nginx` | `…/pastebin-nginx:rpi` | `unless-stopped` | serves SPA + proxies `/api` |
-| `deploy-pastebin-api-1` | `…/pastebin-api:rpi` | `unless-stopped` | .NET 8 API, mem_limit 250m |
+| `deploy-pastebin-api-1` | `…/pastebin-api:rpi` | `unless-stopped` | Nim API, mem_limit 250m |
 | `pastebin-registry` | `registry:2` | `always` | on-Pi registry, storage on the btrfs disk |
 
 ### Deploy & restart

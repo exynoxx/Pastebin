@@ -127,44 +127,46 @@ proc ipState(ip: string, nowSec: int64): IpState =
     result = gIps[ip]
     result.lastSeen = nowSec
 
+template withIpState(ip: string; nowSec, st, body: untyped) =
+    ## The shared preamble of every per-IP policy check: take the process lock, sweep idle entries,
+    ## and fetch this IP's state. Injects `nowSec` (current unix second) and `st` (its IpState) into
+    ## `body`, and releases the lock on any exit (including `return`).
+    let nowSec = getTime().toUnix()
+    withLock gLock:
+        maybeSweep(nowSec)
+        let st = ipState(ip, nowSec)
+        body
+
 # ---- request rate limiting + overload protection ---------------------------
 
 type AcquireResult* = object
     allowed*: bool
     concurrencyHeld*: bool
 
+const Rejected = AcquireResult(allowed: false, concurrencyHeld: false)
+
 proc tryAcquire*(ip: string, isUpload: bool): AcquireResult =
     ## Applies the chained global limiters (+ uploads policy). On success the caller MUST call
     ## `releaseConcurrency` when the request finishes.
-    let nowSec = getTime().toUnix()
-    acquire(gLock)
-    try:
-        maybeSweep(nowSec)
-        let st = ipState(ip, nowSec)
-
+    withIpState(ip, nowSec, st):
         if not slidingTry(st.req, nowSec, gPerIpLimit.int64):
-            return AcquireResult(allowed: false, concurrencyHeld: false)
+            return Rejected
 
         if not slidingTry(gGlobal, nowSec, gGlobalLimit.int64):
-            return AcquireResult(allowed: false, concurrencyHeld: false)
+            return Rejected
 
         if gConcurrent >= gConcurrencyLimit:
-            return AcquireResult(allowed: false, concurrencyHeld: false)
+            return Rejected
 
         if isUpload and not fixedTry(st.up, nowSec, gUploadsLimit.int64):
-            return AcquireResult(allowed: false, concurrencyHeld: false)
+            return Rejected
 
         gConcurrent.inc
         return AcquireResult(allowed: true, concurrencyHeld: true)
-    finally:
-        release(gLock)
 
 proc releaseConcurrency*() =
-    acquire(gLock)
-    try:
+    withLock gLock:
         if gConcurrent > 0: gConcurrent.dec
-    finally:
-        release(gLock)
 
 # ---- paste-creation burst / penalty box ------------------------------------
 
@@ -173,39 +175,36 @@ type Decision* = object
     retryAfterSeconds*: int
     penalized*: bool
 
+proc allow(penalized: bool): Decision =
+    Decision(allowed: true, retryAfterSeconds: 0, penalized: penalized)
+
+proc deny(retryAfterSeconds: int, penalized: bool): Decision =
+    Decision(allowed: false, retryAfterSeconds: retryAfterSeconds, penalized: penalized)
+
 proc checkPasteCreate*(ip: string): Decision =
     ## The per-attempt paste-creation decision (burst window + penalty box).
-    let nowSec = getTime().toUnix()
-    acquire(gLock)
-    try:
-        maybeSweep(nowSec)
-        let st = ipState(ip, nowSec)
-
+    withIpState(ip, nowSec, st):
+        # In the penalty box: one paste per interval regardless of how long ago the burst was.
         if nowSec < st.penaltyUntil:
-            # In the penalty box: one paste per interval regardless of how long ago the burst was.
             let sinceLast = nowSec - st.lastAllowed
-            if sinceLast >= gPastePenaltyIntervalSeconds:
-                st.lastAllowed = nowSec
-                result = Decision(allowed: true, retryAfterSeconds: 0, penalized: true)
-            else:
-                result = Decision(allowed: false,
-                    retryAfterSeconds: int(gPastePenaltyIntervalSeconds.int64 - sinceLast), penalized: true)
-        else:
-            # Normal mode: drop timestamps aged out of the rolling window.
-            while st.recent.len > 0 and nowSec - st.recent.peekFirst() >= gPasteWindowSeconds:
-                discard st.recent.popFirst()
+            if sinceLast < gPastePenaltyIntervalSeconds:
+                return deny(int(gPastePenaltyIntervalSeconds.int64 - sinceLast), penalized = true)
+            st.lastAllowed = nowSec
+            return allow(penalized = true)
 
-            if st.recent.len >= gPasteBurstLimit:
-                # Over the burst limit -> trip the penalty and reject this paste.
-                st.penaltyUntil = nowSec + gPastePenaltySeconds
-                st.recent.clear()
-                result = Decision(allowed: false, retryAfterSeconds: gPastePenaltyIntervalSeconds, penalized: true)
-            else:
-                st.recent.addLast(nowSec)
-                st.lastAllowed = nowSec
-                result = Decision(allowed: true, retryAfterSeconds: 0, penalized: false)
-    finally:
-        release(gLock)
+        # Normal mode: drop timestamps aged out of the rolling window.
+        while st.recent.len > 0 and nowSec - st.recent.peekFirst() >= gPasteWindowSeconds:
+            discard st.recent.popFirst()
+
+        # Over the burst limit -> trip the penalty and reject this paste.
+        if st.recent.len >= gPasteBurstLimit:
+            st.penaltyUntil = nowSec + gPastePenaltySeconds
+            st.recent.clear()
+            return deny(gPastePenaltyIntervalSeconds, penalized = true)
+
+        st.recent.addLast(nowSec)
+        st.lastAllowed = nowSec
+        return allow(penalized = false)
 
 # ---- HTTP adapters (framework middleware + rejection helper) ----------------
 

@@ -20,6 +20,9 @@ type
 proc runChain*[E](ctx: Ctx[E], chain: seq[Middleware[E]], final: Next) =
     ## Run `chain` in order, each wrapping the next, with `final` (the endpoint call) at the centre.
     ## Builds the `next` closures lazily so a middleware that short-circuits never advances the rest.
+    if chain.len == 0:
+        final()          # no middleware => skip building the closure ladder entirely
+        return
     proc at(i: int): Next =
         result = proc() {.gcsafe.} =
             # `at` recurses to build the next link; the cast affirms the whole chain is gcsafe

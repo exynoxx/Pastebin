@@ -16,9 +16,13 @@ proc dispatchRequest*[E, P](
         chainFor: proc(found: bool, payload: P): seq[Middleware[E]] {.gcsafe.}) {.gcsafe.} =
     {.cast(gcsafe).}:
         let ip = resolveIp(req)
-        let m = routes.match(req.httpMethod, splitPath(req.path))
+        let m = routes.match(req.httpMethod, req.path)
         let ctx = Ctx[E](req: req, ip: ip, params: m.params, cfg: cfg)
         let handler = handlerFor(m.found, m.payload)
-        let final = proc() {.gcsafe.} =
-            {.cast(gcsafe).}: handler(ctx)
-        runChain(ctx, chainFor(m.found, m.payload), final)
+        let chain = chainFor(m.found, m.payload)
+        if chain.len == 0:
+            handler(ctx)                                 # common case: no closures built at all
+        else:
+            let final = proc() {.gcsafe.} =
+                {.cast(gcsafe).}: handler(ctx)
+            runChain(ctx, chain, final)

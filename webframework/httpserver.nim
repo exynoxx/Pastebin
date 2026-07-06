@@ -42,6 +42,20 @@ var
     gBodySpillThreshold: int
     gMaxBodyBytes: int64
 
+# Reused across every request a worker serves (each worker handles one connection at a time, so
+# there's no aliasing): a threadvar buffer costs one allocation per thread for the process lifetime
+# instead of one per request. gRecvBuf reads request bytes; gSendBuf streams file downloads.
+var
+    gRecvBuf {.threadvar.}: string
+    gSendBuf {.threadvar.}: string
+
+proc addBytes(dst: var string, src: string, n: int) =
+    ## Append src[0 ..< n] to dst without allocating the `src[0 ..< n]` slice temporary.
+    if n <= 0: return
+    let old = dst.len
+    dst.setLen(old + n)
+    copyMem(addr dst[old], unsafeAddr src[0], n)
+
 func reason(code: int): string =
     ## Reason phrase for the status codes this app emits. A case (not a global Table) keeps the
     ## proc GC-safe so it can run on the worker threads.
@@ -102,13 +116,25 @@ proc sendAll(sock: Socket, data: string) =
     if data.len > 0:
         sock.send(data)
 
+proc sendAll(sock: Socket, buf: pointer, size: int) =
+    ## Loop until all `size` bytes at `buf` are sent — the raw `send` may short-write.
+    var sent = 0
+    while sent < size:
+        let n = sock.send(cast[pointer](cast[uint](buf) + sent.uint), size - sent)
+        if n <= 0: break
+        sent += n
+
+proc buildHead(code: int, headers: seq[(string, string)]): string =
+    result = "HTTP/1.1 " & $code & " " & reason(code) & "\r\n"
+    for (k, v) in headers:
+        result.add k & ": " & v & "\r\n"
+    result.add "Connection: close\r\n\r\n"
+
 proc writeStatusAndHeaders(sock: Socket, code: int,
                            headers: seq[(string, string)]) =
-    var head = "HTTP/1.1 " & $code & " " & reason(code) & "\r\n"
-    for (k, v) in headers:
-        head.add k & ": " & v & "\r\n"
-    head.add "Connection: close\r\n\r\n"
-    sock.sendAll(head)
+    ## Send the status line + headers only. Used by the streaming paths (respondFile), where the
+    ## body can't be coalesced into one buffer.
+    sock.sendAll(buildHead(code, headers))
 
 proc respond*(req: Request, statusCode: int, body: string,
               contentType = "application/json; charset=utf-8",
@@ -121,8 +147,12 @@ proc respond*(req: Request, statusCode: int, body: string,
     hs.add ("Content-Length", $body.len)
     for h in extraHeaders: hs.add h
     swallowException: # peer may disconnect before/while receiving the response
-        writeStatusAndHeaders(req.socket, statusCode, hs)
-        req.socket.sendAll(body)
+        # One buffer, one send(): headers followed by the (small) body. respond is only for
+        # small/JSON payloads — large data goes through respondFile — so the concat is cheap and
+        # saves a syscall per request versus sending head and body separately.
+        var msg = buildHead(statusCode, hs)
+        msg.add body
+        req.socket.sendAll(msg)
 
 func parseSingleRange(rangeHeader: string, size: int64):
         tuple[ok, satisfiable: bool, first, last: int64] =
@@ -160,13 +190,13 @@ proc streamFileRange(sock: Socket, f: File, first, count: int64) =
     ## Stream `count` bytes starting at `first` from `f` to the socket in bounded chunks.
     f.setFilePos(first)
     var remaining = count
-    var buf = newString(SendChunk)
+    if gSendBuf.len < SendChunk: gSendBuf.setLen(SendChunk)
     while remaining > 0:
         let want = int(min(remaining, SendChunk.int64))
-        let n = f.readBuffer(addr buf[0], want)
+        let n = f.readBuffer(addr gSendBuf[0], want)
         if n <= 0: break
-        if n == buf.len: sock.send(buf)
-        else: sock.send(buf[0 ..< n])
+        # Send the first n bytes straight from the buffer — no slice copy for a partial last chunk.
+        sock.sendAll(addr gSendBuf[0], n)
         remaining -= n
 
 proc respondFile*(req: Request, path, contentType: string,
@@ -179,10 +209,11 @@ proc respondFile*(req: Request, path, contentType: string,
     if not open(f, path, fmRead):
         let body = $(%*{"error": "Not found"})
         swallowException:
-            writeStatusAndHeaders(req.socket, 404,
+            var msg = buildHead(404,
                 @[("Content-Type", "application/json; charset=utf-8"),
                     ("Content-Length", $body.len)])
-            req.socket.sendAll(body)
+            msg.add body
+            req.socket.sendAll(msg)
         return
     defer: f.close()
 
@@ -213,19 +244,62 @@ proc respondFile*(req: Request, path, contentType: string,
 
 # ---- request reading -------------------------------------------------------
 
+proc parseRequestLineAndHeaders(req: Request, headerText: string): bool =
+    ## Parse the request line + header block by index, allocating only the strings actually kept
+    ## (method, path, query, header keys/values). Avoids split()'s per-line seq and strip()'s
+    ## per-header temporaries. Returns false on a malformed request line.
+    let hlen = headerText.len
+    var lineEnd = headerText.find("\r\n")
+    if lineEnd < 0: lineEnd = hlen
+
+    # request line: METHOD SP URI (SP VERSION)?
+    let sp1 = headerText.find(' ')
+    if sp1 <= 0 or sp1 >= lineEnd: return false
+    var uriEnd = headerText.find(' ', sp1 + 1)
+    if uriEnd < 0 or uriEnd > lineEnd: uriEnd = lineEnd
+    if uriEnd <= sp1 + 1: return false
+    req.httpMethod = headerText[0 ..< sp1]
+    let uri = headerText[sp1 + 1 ..< uriEnd]
+    let q = uri.find('?')
+    if q >= 0:
+        req.path = uri[0 ..< q].decodeUrl()
+        req.rawQuery = uri[q + 1 .. ^1]
+    else:
+        req.path = uri.decodeUrl()
+
+    # header lines: "key: value", trimmed to the stored ranges without a strip() temporary
+    var pos = lineEnd + 2
+    while pos < hlen:
+        var eol = headerText.find("\r\n", pos)
+        if eol < 0: eol = hlen
+        let colon = headerText.find(':', pos)
+        if colon >= pos and colon < eol:
+            var ks = pos
+            var ke = colon
+            while ks < ke and headerText[ks] in {' ', '\t'}: inc ks
+            while ke > ks and headerText[ke - 1] in {' ', '\t'}: dec ke
+            var vs = colon + 1
+            var ve = eol
+            while vs < ve and headerText[vs] in {' ', '\t'}: inc vs
+            while ve > vs and headerText[ve - 1] in {' ', '\t'}: dec ve
+            if ke > ks:
+                req.headers.add (headerText[ks ..< ke], headerText[vs ..< ve])
+        pos = eol + 2
+    true
+
 proc handleConnection(sock: Socket, remote: string) =
     ## Reads exactly one request, dispatches it, cleans up. Never raises.
     var req = Request(socket: sock, remoteAddress: remote)
     var bodyTemp = ""
     try:
         # --- read the header block (until CRLF CRLF), keeping any body bytes read past it ---
+        if gRecvBuf.len < RecvChunk: gRecvBuf.setLen(RecvChunk)
         var pending = ""
         var headerEnd = -1
-        var chunk = newString(RecvChunk)
         while headerEnd < 0:
-            let n = sock.recv(addr chunk[0], RecvChunk)
+            let n = sock.recv(addr gRecvBuf[0], RecvChunk)
             if n <= 0: break
-            pending.add chunk[0 ..< n]
+            pending.addBytes(gRecvBuf, n)
             headerEnd = pending.find("\r\n\r\n")
             if pending.len > 64 * 1024 and headerEnd < 0:
                 req.respond(400, $(%*{"error": "Header too large"}))
@@ -237,27 +311,9 @@ proc handleConnection(sock: Socket, remote: string) =
         var leftover = pending[headerEnd + 4 .. ^1]  # first body bytes already received
 
         # --- parse request line + headers ---
-        let lines = headerText.split("\r\n")
-        if lines.len == 0 or lines[0].len == 0:
+        if not parseRequestLineAndHeaders(req, headerText):
             req.respond(400, $(%*{"error": "Bad request"}))
             return
-        let parts = lines[0].split(' ')
-        if parts.len < 2:
-            req.respond(400, $(%*{"error": "Bad request"}))
-            return
-        req.httpMethod = parts[0]
-        let uri = parts[1]
-        let q = uri.find('?')
-        if q >= 0:
-            req.path = uri[0 ..< q].decodeUrl()
-            req.rawQuery = uri[q + 1 .. ^1]
-        else:
-            req.path = uri.decodeUrl()
-        for i in 1 ..< lines.len:
-            let line = lines[i]
-            let colon = line.find(':')
-            if colon > 0:
-                req.headers.add (line[0 ..< colon].strip(), line[colon + 1 .. ^1].strip())
 
         # --- body ---
         var contentLength: int64 = 0
@@ -281,10 +337,9 @@ proc handleConnection(sock: Socket, remote: string) =
                     received = leftover.len.int64
                 while received < contentLength:
                     let want = int(min((contentLength - received), RecvChunk.int64))
-                    chunk.setLen(RecvChunk)
-                    let n = sock.recv(addr chunk[0], want)
+                    let n = sock.recv(addr gRecvBuf[0], want)
                     if n <= 0: break
-                    discard outF.writeBuffer(addr chunk[0], n)
+                    discard outF.writeBuffer(addr gRecvBuf[0], n)
                     received += n
                 outF.close()
             else:
@@ -292,10 +347,9 @@ proc handleConnection(sock: Socket, remote: string) =
                 req.body = leftover
                 while req.body.len.int64 < contentLength:
                     let want = int(min((contentLength - req.body.len.int64), RecvChunk.int64))
-                    chunk.setLen(RecvChunk)
-                    let n = sock.recv(addr chunk[0], want)
+                    let n = sock.recv(addr gRecvBuf[0], want)
                     if n <= 0: break
-                    req.body.add chunk[0 ..< n]
+                    req.body.addBytes(gRecvBuf, n)
 
         gHandler(req)
         if not req.responded:

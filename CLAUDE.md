@@ -13,7 +13,7 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
                                                    + /api proxy)
 ```
 
-- **`pastebin-api-nim/`** — **Nim backend, the deployed one.** Source of truth for all limits,
+- **`pastebin-api/`** — **Nim backend, the deployed one.** Source of truth for all limits,
   quotas, and storage. (Originally a port of a .NET backend, since removed — see Backend below.)
 - **`pastebin-frontend/`** — React 18 SPA (Create React App / `react-scripts`). `npm run build` → static `/build`.
 - **`nginx/`** — Reverse proxy + static serving. Serves the built SPA, proxies `/api/*` to the API,
@@ -37,14 +37,14 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
   what it plainly does. Do add a concise comment where a concept or gotcha isn't obvious, or where a
   high-level detail needs describing (the *why*, an invariant, a subtle edge case).
 
-## Backend (`pastebin-api-nim/`) — the deployed one
+## Backend (`pastebin-api/`) — the deployed one
 
-The Pi runs this **Nim** backend (`task build` builds `pastebin-api-nim/Dockerfile`). It began as a
+The Pi runs this **Nim** backend (`task build` builds `pastebin-api/Dockerfile`). It began as a
 drop-in port of a .NET backend, but that .NET tree has been **deleted**, and the Nim backend has
 since **deliberately diverged** from the old .NET wire/storage format to simplify itself (epoch-millis
 timestamps instead of .NET `"o"` text, `""` instead of JSON `null` for empty `contentType`, base62
 IDs, `{"id"}`-only create responses). Edit the Nim tree to change runtime behavior. Onion
-structure under `pastebin-api-nim/src/`:
+structure under `pastebin-api/src/`:
 
 - `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults, incl. the 3-tier rate
   limits and `uploads` policy. A few never-tuned limits (`maxRequestBytes` 1 GB, `pastePreviewChars`,
@@ -73,7 +73,7 @@ structure under `pastebin-api-nim/src/`:
 - `pastebin.nimble` — deps: `db_connector`, `zippy` (folder→zip); needs `nim >= 2.0`.
 
 Local dev (no Docker; `nim` is on PATH at `~/.nimble/bin/nim`):
-- Type-check: `cd pastebin-api-nim && nim check --hints:off src/main.nim` (exit 0 = clean).
+- Type-check: `cd pastebin-api && nim check --hints:off src/main.nim` (exit 0 = clean).
 - Build: `nim c -o:<out> src/main.nim`.
 - Run e2e: `SQLITE_PATH=<dir>/db.sqlite BLOB_STORAGE_PATH=<dir>/blobs PORT=18080
   ADMIN_TOKEN=<tok> NETWORK_LOG=false <binary>`, then curl `http://127.0.0.1:$PORT/api/…`.

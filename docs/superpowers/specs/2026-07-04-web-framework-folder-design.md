@@ -5,7 +5,7 @@ Status: approved (Approach B)
 
 ## Goal
 
-Extract the app-agnostic HTTP layer of `pastebin-api-nim` into a dedicated
+Extract the app-agnostic HTTP layer of `pastebin-api` into a dedicated
 `src/framework/` folder with **zero app imports**, separating the reusable web
 *mechanism* from this app's *security policies*. The app depends on the
 framework, never the reverse.

@@ -8,7 +8,7 @@ node_modules/
 *.DotSettings.user
 
 # Compiled Nim backend binary (build.sh output)
-/pastebin-api-nim/pastebin
+/pastebin-api/pastebin
 
 # Local secrets — never commit
 .env

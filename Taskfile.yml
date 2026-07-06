@@ -115,7 +115,7 @@ tasks:
             --platform {{.PLATFORM}} \
             --provenance=false --sbom=false \
             -t {{.PUSH_REGISTRY}}/pastebin-api:rpi \
-            -f pastebin-api-nim/Dockerfile pastebin-api-nim \
+            -f pastebin-api/Dockerfile pastebin-api \
             --push & api=$!
           docker buildx build \
             --builder {{.BUILDER}} \

@@ -9,7 +9,7 @@
 # proper PT_INTERP and dlopen works. Nothing but libc is needed at link time; the arm64 shared
 # libs come from the (glibc) runtime stage below.
 #
-#   docker buildx build --platform linux/arm64 -f pastebin-api-nim/Dockerfile pastebin-api-nim
+#   docker buildx build --platform linux/arm64 -f pastebin-api/Dockerfile pastebin-api
 
 ARG ZIG_VERSION=0.13.0
 # Pin the target glibc low enough to run on the runtime image's glibc (bookworm = 2.36).

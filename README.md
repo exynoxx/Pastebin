@@ -11,7 +11,7 @@ public ──HTTPS──▶ Tailscale Funnel ──HTTP──▶ nginx :80 ─�
                                               + /api proxy)
 ```
 
-- **`pastebin-api-nim/`** — Nim backend. The source of truth for all limits, quotas, and storage.
+- **`pastebin-api/`** — Nim backend. The source of truth for all limits, quotas, and storage.
 - **`pastebin-frontend/`** — React 18 SPA (`npm run build` → static `/build`).
 - **`nginx/`** — serves the built SPA and reverse-proxies `/api/*` to the API. Plain HTTP on `:80`
   (TLS is terminated upstream by Funnel — do **not** add an HTTPS redirect).
@@ -68,7 +68,7 @@ source of truth (with defaults and descriptions). The main ones:
 
 **Admin API.** With `ADMIN_TOKEN` set, admin endpoints accept an `X-Admin-Token` header. A short
 token is fine — failed attempts hit an escalating per-IP lockout plus a delay and constant-time
-compare (see `pastebin-api-nim/src/adminguard.nim`).
+compare (see `pastebin-api/src/endpoints/admin/guard.nim`).
 
 > **Note:** CORS is currently `AllowAll` — tighten it before any shared/production use.
 

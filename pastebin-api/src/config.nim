@@ -50,47 +50,28 @@ proc getLong(key: string, fallback: int64): int64 =
     try: parseBiggestInt(v.strip())
     except ValueError: fallback
 
-proc getInt(key: string, fallback: int): int =
-    int(getLong(key, fallback.int64))
-
 proc loadConfig*(): AppConfig =
-    # Fixed limits (not env-tunable): nobody has ever needed to change these, so they are
-    # constants rather than config surface. maxRequestBytes must stay in sync with nginx's
-    # client_max_body_size (see CLAUDE.md Gotchas) — change both together and rebuild.
-    result.maxRequestBytes       = 1_073_741_824    # 1 GB
-    result.pastePreviewChars     = 8_192
-    result.untitledTitleMaxChars = 40
-
-    result.inlinePasteMaxBytes   = getInt("INLINE_PASTE_MAX_BYTES", 262_144)
-    result.maxPasteBytes         = getLong("MAX_PASTE_BYTES", 10_485_760)
-    result.maxStorageBytesPerIp  = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
-    # Folder uploads are zipped in memory (zippy has no streaming writer), so this caps the
-    # uncompressed total to keep peak RAM well under the container memory limit — a real memory
-    # bound, distinct from the much larger per-IP storage quota.
-    result.maxFolderUploadBytes  = getLong("MAX_FOLDER_UPLOAD_BYTES", 26_214_400)  # 25 MB
-
-    result.perIpPerMinute        = getInt("RATE_LIMIT_PER_IP_PER_MIN", 120)
-    result.uploadsPerMinute      = getInt("RATE_LIMIT_UPLOADS_PER_MIN", 10)
-    result.globalConcurrency     = getInt("RATE_LIMIT_GLOBAL_CONCURRENCY", 50)
-    result.globalPerMinute       = getInt("RATE_LIMIT_GLOBAL_PER_MIN", 600)
-
-    result.pasteBurstLimit       = getInt("PASTE_BURST_LIMIT", 10)
-    result.pasteBurstWindowSec   = getInt("PASTE_BURST_WINDOW_SEC", 60)
-    result.pastePenaltySec       = getInt("PASTE_PENALTY_SEC", 1800)
-    result.pastePenaltyIntervalSec = getInt("PASTE_PENALTY_INTERVAL_SEC", 60)
-
-    result.ntfyServerUrl = getEnv("NTFY_SERVER_URL", "https://ntfy.sh")
-    result.ntfyTopic     = getEnv("NTFY_TOPIC", "")
-    # Absolute base for links embedded in ntfy notifications; default to the live public URL so a
-    # fresh deploy produces working (not relative/broken) links without extra config.
-    result.publicBaseUrl = getEnv("PUBLIC_BASE_URL", "https://rpi.deer-hue.ts.net")
-
-    result.adminToken      = getEnv("ADMIN_TOKEN", "")
-
-    result.sqlitePath      = getEnv("SQLITE_PATH", "/data/db/pastebin.db")
-    result.blobStoragePath = getEnv("BLOB_STORAGE_PATH", "/data/blobs")
-    result.port          = getInt("PORT", 8080)
-    # Mummy's default worker pool is cores*10; the Pi 3B has 4 cores, so 40 threads each
-    # with a stack would blow the 250 MB cap. Pin low (plan suggests 8).
-    result.workerThreads = getInt("WORKER_THREADS", 8)
-    result.networkLog    = getEnv("NETWORK_LOG", "true").toLowerAscii() != "false"
+    result.maxRequestBytes         = 1_073_741_824    # 1 GB
+    result.pastePreviewChars       = 8_192
+    result.untitledTitleMaxChars   = 40
+    result.inlinePasteMaxBytes     = getLong("INLINE_PASTE_MAX_BYTES", 262_144).int
+    result.maxPasteBytes           = getLong("MAX_PASTE_BYTES", 10_485_760)
+    result.maxStorageBytesPerIp    = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
+    result.maxFolderUploadBytes    = getLong("MAX_FOLDER_UPLOAD_BYTES", 26_214_400)  # 25 MB zippy has no streaming writer
+    result.perIpPerMinute          = getLong("RATE_LIMIT_PER_IP_PER_MIN", 120).int
+    result.uploadsPerMinute        = getLong("RATE_LIMIT_UPLOADS_PER_MIN", 10).int
+    result.globalConcurrency       = getLong("RATE_LIMIT_GLOBAL_CONCURRENCY", 50).int
+    result.globalPerMinute         = getLong("RATE_LIMIT_GLOBAL_PER_MIN", 600).int
+    result.pasteBurstLimit         = getLong("PASTE_BURST_LIMIT", 10).int
+    result.pasteBurstWindowSec     = getLong("PASTE_BURST_WINDOW_SEC", 60).int
+    result.pastePenaltySec         = getLong("PASTE_PENALTY_SEC", 1800).int
+    result.pastePenaltyIntervalSec = getLong("PASTE_PENALTY_INTERVAL_SEC", 60).int
+    result.ntfyServerUrl           = getEnv("NTFY_SERVER_URL", "https://ntfy.sh")
+    result.ntfyTopic               = getEnv("NTFY_TOPIC", "")
+    result.publicBaseUrl           = getEnv("PUBLIC_BASE_URL", "https://rpi.deer-hue.ts.net")
+    result.adminToken              = getEnv("ADMIN_TOKEN", "")
+    result.sqlitePath              = getEnv("SQLITE_PATH", "/data/db/pastebin.db")
+    result.blobStoragePath         = getEnv("BLOB_STORAGE_PATH", "/data/blobs")
+    result.port                    = getLong("PORT", 8080).int
+    result.workerThreads           = getLong("WORKER_THREADS", 8).int
+    result.networkLog              = getEnv("NETWORK_LOG", "true").toLowerAscii() != "false"

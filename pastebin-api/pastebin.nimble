@@ -2,7 +2,7 @@
 
 version     = "0.1.0"
 author      = "nicholas"
-description = "Nim drop-in replacement backend for Pastebin (Mummy + SQLite + blob store)"
+description = "Nim backend for Pastebin (hand-rolled HTTP framework + SQLite + blob store)"
 license     = "MIT"
 srcDir      = "src"
 bin         = @["main"]

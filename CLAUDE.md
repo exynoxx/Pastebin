@@ -155,7 +155,9 @@ Compose v2.39.2, OpenMediaVault 7. OMV's web UI was moved off :80 → **:9000** 
 
 - SQLite uses WAL → the data dir must be a real POSIX filesystem (not FAT32/exFAT).
 - nginx `client_max_body_size` and the API's `MAX_REQUEST_BYTES` must stay in sync (1 GB default).
-- CORS is `AllowAll` — flagged for tightening before any non-personal production use.
+- CORS: the API sets no `Access-Control-*` headers — the SPA is same-origin (relative `/api` base),
+  so cross-origin browser access is blocked by default. (The old wildcard `AllowAll` in nginx, a
+  leftover from the deleted .NET backend, has been removed.)
 - Compose recreates the API container only when `pastebin-api:rpi` resolves to a new image ID;
   if a deploy is interrupted (e.g. Pi reboot mid-`docker load`), the image can land corrupt — re-ship.
 - **Production data lives on the btrfs data disk `/dev/sdb` (UUID `<data-uuid>`, 30 GB),** which OMV

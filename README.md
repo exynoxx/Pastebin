@@ -70,7 +70,8 @@ source of truth (with defaults and descriptions). The main ones:
 token is fine — failed attempts hit an escalating per-IP lockout plus a delay and constant-time
 compare (see `pastebin-api/src/endpoints/admin/guard.nim`).
 
-> **Note:** CORS is currently `AllowAll` — tighten it before any shared/production use.
+> **Note:** The SPA and API are served same-origin (nginx serves both), so the API sets no CORS
+> headers — cross-origin browser access is blocked by default.
 
 ## More
 

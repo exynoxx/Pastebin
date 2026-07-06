@@ -6,7 +6,7 @@
 import std/[strutils, tables, strformat]
 import ../context, ../../json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../webframework/multipart
+       ../../timeutil, ../../apperrors, ../../ids, ../../webframework/multipart
 import zippy/ziparchives
 
 func zipEntryName(entry: MultipartEntry): string =
@@ -62,11 +62,11 @@ proc handleUploadFolder*(ctx: Ctx) =
         let zipBytes = createZipArchive(zipEntries)
         let (blobId, size) = saveFromString(zipBytes)
         let f = StoredFile(
-            id: randomHex(6),
+            id: newId(),
             originalName: zipFileName(folderName),
             contentType: "application/zip",
             size: size,
-            uploadedAt: nowIso(),
+            uploadedAt: nowMillis(),
             visibility: (if visibility == "private": "private" else: "public"),
             blobId: blobId)
         insertFile(f, ctx.ip)

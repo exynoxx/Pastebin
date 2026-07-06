@@ -16,10 +16,10 @@ proc handleCreatePasteFromFile*(ctx: Ctx) =
     let visibility = root{"visibility"}.getStr("public")
     let content =
         "[FILE ATTACHMENT]\nFile: " & f.originalName & "\nSize: " & $f.size & " bytes\n" &
-        "Type: " & f.contentType & "\nUploaded: " & isoToUniversal(f.uploadedAt) & "\n\n" &
+        "Type: " & f.contentType & "\nUploaded: " & formatMillisUtc(f.uploadedAt) & "\n\n" &
         "File ID: " & f.id & "\nDownload: /api/files/" & f.id & "/download"
     try:
         let p = createPasteRecord(ctx.cfg, title, content, visibility, ctx.ip)
-        ctx.req.respond(200, $(%*{"pasteId": p.id, "id": p.id}))
+        ctx.req.respond(200, $(%*{"id": p.id}))
     except PayloadTooLargeError as e:
         ctx.respondError(413, e.msg)

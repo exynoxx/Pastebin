@@ -2,22 +2,14 @@
 
 import std/[json, strutils]
 import ../context
-import ../../types, ../../db
+import ../../types, ../../db, ../../json
+
+serialize(PasteSummary)
 
 func summariesJson(items: seq[PasteSummary]): string =
-    ## camelCase to match ASP.NET's default output; contentType is JSON null (not "") when empty.
-    # Explicit accumulation, not `collect`: JsonNode isn't a collect-supported
-    # container, and this is a per-request response path (guide §10 RSS caveat).
+    ## Assemble the array from the macro-generated per-item node builder.
     var arr = newJArray()
-    for s in items:
-        arr.add %*{
-            "id": s.id,
-            "title": s.title,
-            "size": s.size,
-            "createdAt": s.createdAt,
-            "kind": s.kind,
-            "contentType": (if s.contentType.len == 0: newJNull() else: %s.contentType),
-        }
+    for s in items: arr.add pasteSummaryNode(s)
     $arr
 
 proc handleRecentPastes*(ctx: Ctx) =

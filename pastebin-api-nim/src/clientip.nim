@@ -1,7 +1,7 @@
-## Real client IP resolution, mirroring pastebin-api/services/ClientIp.cs.
+## Real client IP resolution.
 ##
-## Verified against the live deployment via /api/debug/ip: public traffic arrives
-## Tailscale Funnel -> nginx -> API. Funnel sets X-Forwarded-For to the real public client and
+## Verified against the live deployment (public traffic arrives
+## Tailscale Funnel -> nginx -> API). Funnel sets X-Forwarded-For to the real public client and
 ## DISCARDS any client-supplied XFF (so the leftmost entry can't be spoofed through the public
 ## path); nginx then appends its own $remote_addr (the docker-bridge gateway). So the real client
 ## is the FIRST X-Forwarded-For entry, e.g. "93.165.245.57, 172.18.0.1".

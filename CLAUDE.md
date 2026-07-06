@@ -37,25 +37,28 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
 ## Backend (`pastebin-api-nim/`) — the deployed one
 
 The Pi runs this **Nim** backend (`task build` builds `pastebin-api-nim/Dockerfile`). A parallel
-.NET tree, `pastebin-api/`, was the original reference port — same routes, env vars, and DB/blob
-format, so it's rollback-compatible on the shared data disk — but it is **not deployed** and need
-not be kept in step. Edit the Nim tree to change runtime behavior. Onion structure under
-`pastebin-api-nim/src/`:
+.NET tree, `pastebin-api/`, was the original reference port — but it is **not deployed** and is not
+kept in step. The Nim backend has since **deliberately diverged** from .NET parity to simplify
+itself (epoch-millis timestamps instead of .NET `"o"` text, `""` instead of JSON `null` for empty
+`contentType`, base62 IDs, `{"id"}`-only create responses), so it is **no longer rollback-compatible**
+with the .NET tree on a shared data disk. Edit the Nim tree to change runtime behavior. Onion
+structure under `pastebin-api-nim/src/`:
 
-- `main.nim` — entrypoint/wiring. `config.nim` — every env-var limit + default (byte-identical to
-  the .NET defaults), incl. the 3-tier rate limits and `uploads` policy.
+- `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults, incl. the 3-tier rate
+  limits and `uploads` policy. A few never-tuned limits (`maxRequestBytes` 1 GB, `pastePreviewChars`,
+  `untitledTitleMaxChars`) are fixed constants, not env vars.
 - **`endpoints/routes.nim` — the route map** (verb → path → handler). Start here to find any
-  endpoint. One handler per file under `endpoints/{pastes,files,admin,debug}/`: createPaste,
+  endpoint. One handler per file under `endpoints/{pastes,files,admin}/`: createPaste,
   rawPaste (`/api/pastes/{id}/raw` streams full text), recentPastes, getPaste; uploadFile,
   uploadFolder (folder→zip), downloadFile, viewFile, createPasteFromFile, getFile, deleteFile;
-  admin listPastes/deletePaste (+ `guard.nim`); debug `ip` (`/api/debug/ip` echoes the caller's IP
-  header chain — `resolvedClientIp`, XFF, X-Real-IP — to verify what reaches the API behind Funnel).
+  admin listPastes/deletePaste (+ `guard.nim`).
 - Services: `db.nim` (SQLite via `db_connector`; creates schema `pastes`+`files` on startup),
   `blobstore.nim` (blob store, 2-char sharding `ab/ab12…`, atomic temp→final writes, seekable/Range
   reads; `saveFromString` for inline-overflow, `saveFromFile` for uploads — paste content <256 KB
   stays inline in SQLite, larger → blob), `quota.nim` (per-IP cap `MAX_STORAGE_BYTES_PER_IP`,
   100 MB), `ratelimit.nim` (per-IP sliding window + global sliding window + global concurrency cap),
-  `ntfy.nim`, `timeutil.nim` (.NET `"o"` timestamps), `types.nim`, `apperrors.nim`.
+  `ntfy.nim`, `timeutil.nim` (Unix epoch-millis timestamps + one-shot legacy-ISO migration),
+  `ids.nim` (8-char base62 public IDs for pastes/files), `types.nim`, `apperrors.nim`.
 - `clientip.nim` — `resolveClientIp`, the client IP for **rate-limit + quota bucketing**. Uses the
   **first `X-Forwarded-For` entry**: Funnel sets XFF to the real public client (dropping any
   client-supplied XFF, so the leftmost hop isn't spoofable via the public path), then nginx appends

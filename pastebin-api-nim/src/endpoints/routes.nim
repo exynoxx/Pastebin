@@ -4,8 +4,7 @@ import
     pastes/recentPastes, pastes/createPaste, pastes/getPaste, pastes/rawPaste,
     files/uploadFile, files/uploadFolder, files/createPasteFromFile,
     files/getFile, files/deleteFile, files/downloadFile, files/viewFile,
-    admin/listPastes, admin/deletePaste,
-    debug/ip
+    admin/listPastes, admin/deletePaste
 
 proc registerRoutes*(): RouteTable =
     # Pastes
@@ -25,5 +24,3 @@ proc registerRoutes*(): RouteTable =
     # Admin (X-Admin-Token — each handler calls requireAdmin upfront)
     result.get(   "/api/admin/pastes",                 handleAdminListPastes)
     result.delete("/api/admin/pastes/{id}",            handleAdminDeletePaste)
-    # Debug
-    result.get(   "/api/debug/ip",                     handleDebugIp)

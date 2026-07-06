@@ -1,10 +1,11 @@
 ## Shared JSON serialization: the `serialize` macro plus the derived response builders.
 ##
-## `serialize(T, omit = [field, ...])` reads T's object fields and emits
-## `func <t>Json*(x: T): string`, mapping each field to a camelCase key (Nim field names
-## already match ASP.NET's default camelCase output). Fields in `omit` are dropped — used
-## to keep internal columns like `blobId` out of JSON. Single-object only: array responses
-## (and per-field hooks like ""->null) are shaped by hand in their slice.
+## `serialize(T, omit = [field, ...])` reads T's object fields and emits two funcs:
+##   `func <t>Node*(x: T): JsonNode`  — the JSON object (fields in `omit` dropped)
+##   `func <t>Json*(x: T): string`    — `$<t>Node(x)`
+## Field names map straight to JSON keys (the Nim field names are already the wire names).
+## `omit` keeps internal columns like `blobId` out of JSON. The `Node` builder lets array
+## responses assemble a JArray from the same field definition instead of repeating it by hand.
 ##
 ## `storedFileJson` is the file-metadata body returned by GET /api/files/{id} and,
 ## identically, by the /upload and /upload-folder responses. blobId is internal.
@@ -34,17 +35,29 @@ macro serialize*(T: typedesc, omit: untyped = []): untyped =
                 newLit(fieldName), newDotExpr(ident("x"), ident(fieldName))))
 
     let tn = objSym.strVal
-    let funcName = toLowerAscii(tn[0]) & tn[1 .. ^1] & "Json"
-    let body = newStmtList(newCall(ident("$"), prefix(tableConstr, "%*")))
-    result = newProc(
-        name = nnkPostfix.newTree(ident("*"), ident(funcName)),
-        params = @[ident("string"), newIdentDefs(ident("x"), objSym)],
-        body = body,
+    let base = toLowerAscii(tn[0]) & tn[1 .. ^1]
+    let nodeName = base & "Node"
+    let jsonName = base & "Json"
+
+    # func <base>Node*(x: T): JsonNode = %*{ ... }
+    let nodeProc = newProc(
+        name = nnkPostfix.newTree(ident("*"), ident(nodeName)),
+        params = @[ident("JsonNode"), newIdentDefs(ident("x"), objSym)],
+        body = newStmtList(prefix(tableConstr, "%*")),
         procType = nnkFuncDef)
+
+    # func <base>Json*(x: T): string = $ <base>Node(x)
+    let jsonProc = newProc(
+        name = nnkPostfix.newTree(ident("*"), ident(jsonName)),
+        params = @[ident("string"), newIdentDefs(ident("x"), objSym)],
+        body = newStmtList(newCall(ident("$"), newCall(ident(nodeName), ident("x")))),
+        procType = nnkFuncDef)
+
+    result = newStmtList(nodeProc, jsonProc)
 
 {.push raises: [].}
 
-# File metadata with [JsonIgnore] BlobId omitted. camelCase to match ASP.NET's default output.
+# File metadata with BlobId omitted (internal).
 serialize(StoredFile, omit = [blobId])
 
 {.pop.}

@@ -296,12 +296,12 @@ function PasteForm({ onPasteCreated }) {
         });
       }
 
-      const pasteUrl = `${window.location.origin}/paste/${pasteResponse.data.pasteId || pasteResponse.data.id}`;
+      const pasteUrl = `${window.location.origin}/paste/${pasteResponse.data.id}`;
       setMessage({
         type: 'success',
         text: 'Paste created successfully!',
         url: pasteUrl,
-        id: pasteResponse.data.pasteId || pasteResponse.data.id
+        id: pasteResponse.data.id
       });
 
       // Reset form

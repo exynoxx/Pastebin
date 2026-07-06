@@ -13,7 +13,7 @@
 
 import std/[locks, os, strutils, options]
 import db_connector/db_sqlite
-import types
+import types, timeutil
 
 var
     gDbPath: string
@@ -45,9 +45,20 @@ proc addColumnIfMissing(db: DbConn, table, column, typ: string) =
     if db.columnExists(table, column): return
     db.exec(sql("ALTER TABLE " & table & " ADD COLUMN " & column & " " & typ & ";"))
 
+proc migrateTimestampsToMillis(db: DbConn) =
+    ## Older DBs stored created_at/uploaded_at as .NET ISO-8601 text. Rewrite any text-typed
+    ## timestamp cell to epoch-millis (SQLite stores type per value, so `typeof` finds the
+    ## stragglers). Idempotent: integer cells are already migrated and skipped.
+    for (tbl, col) in [("pastes", "created_at"), ("files", "uploaded_at")]:
+        let rows = db.getAllRows(sql(
+            "SELECT id, " & col & " FROM " & tbl & " WHERE typeof(" & col & ") = 'text';"))
+        for r in rows:
+            db.exec(sql("UPDATE " & tbl & " SET " & col & " = ? WHERE id = ?;"),
+                $isoToMillis(r[1]), r[0])
+
 proc initDb*(sqlitePath: string) =
     ## Run once at startup: create the data dir, open a bootstrap connection, set PRAGMAs and
-    ## create/migrate the schema. Byte-identical to SqliteConnectionFactory.Initialize().
+    ## create/migrate the schema.
     gDbPath = sqlitePath
     let dir = parentDir(sqlitePath)
     if dir.len > 0: createDir(dir)
@@ -67,7 +78,7 @@ proc initDb*(sqlitePath: string) =
                 content      TEXT NOT NULL,
                 size         INTEGER NOT NULL,
                 is_truncated INTEGER NOT NULL,
-                created_at   TEXT NOT NULL,
+                created_at   INTEGER NOT NULL,
                 blob_id      TEXT NULL,
                 visibility   TEXT NOT NULL DEFAULT 'public'
         );
@@ -79,7 +90,7 @@ proc initDb*(sqlitePath: string) =
                 original_name TEXT NOT NULL,
                 content_type  TEXT NOT NULL,
                 size          INTEGER NOT NULL,
-                uploaded_at   TEXT NOT NULL,
+                uploaded_at   INTEGER NOT NULL,
                 blob_id       TEXT NOT NULL,
                 visibility    TEXT NOT NULL DEFAULT 'public'
         );
@@ -93,6 +104,8 @@ proc initDb*(sqlitePath: string) =
 
     db.exec(sql"CREATE INDEX IF NOT EXISTS ix_pastes_owner_ip ON pastes (owner_ip);")
     db.exec(sql"CREATE INDEX IF NOT EXISTS ix_files_owner_ip ON files (owner_ip);")
+
+    db.migrateTimestampsToMillis()
 
 proc conn(): DbConn =
     ## The calling worker thread's lazily-opened connection.
@@ -112,14 +125,14 @@ proc insertPaste*(p: Paste, ownerIp: string) =
             conn().exec(sql"""
                 INSERT INTO pastes (id, title, content, size, is_truncated, created_at, blob_id, owner_ip, visibility)
                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?);
-            """, p.id, p.title, p.content, $p.size, (if p.isTruncated: "1" else: "0"),
-                p.createdAt, ownerIp, p.visibility)
+            """, p.id, p.title, p.content, $p.size, $ord(p.isTruncated),
+                $p.createdAt, ownerIp, p.visibility)
         else:
             conn().exec(sql"""
                 INSERT INTO pastes (id, title, content, size, is_truncated, created_at, blob_id, owner_ip, visibility)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, p.id, p.title, p.content, $p.size, (if p.isTruncated: "1" else: "0"),
-                p.createdAt, p.blobId, ownerIp, p.visibility)
+            """, p.id, p.title, p.content, $p.size, $ord(p.isTruncated),
+                $p.createdAt, p.blobId, ownerIp, p.visibility)
 
 proc selectPaste*(id: string): Option[Paste] =
     ## Fetch a single paste by id, or none if it doesn't exist.
@@ -132,8 +145,8 @@ proc selectPaste*(id: string): Option[Paste] =
     let paste = Paste(
         id: r[0], title: r[1], content: r[2],
         size: int64OrZero(r[3]),
-        isTruncated: r[4] != "0" and r[4].len > 0,
-        createdAt: r[5],
+        isTruncated: int64OrZero(r[4]) != 0,
+        createdAt: int64OrZero(r[5]),
         blobId: r[6],
         visibility: r[7])
     some(paste)
@@ -152,8 +165,8 @@ proc selectRecentSummaries*(limit: int): seq[PasteSummary] =
         result.add PasteSummary(
             id: r[0], title: r[1],
             size: int64OrZero(r[2]),
-            createdAt: r[3], kind: r[4],
-            contentType: r[5])  # "" (NULL) for pastes -> emitted as JSON null
+            createdAt: int64OrZero(r[3]), kind: r[4],
+            contentType: r[5])  # "" (NULL) for pastes
 
 proc selectAllPastes*(): seq[AdminPasteRow] =
     ## Admin view: every paste (no visibility filter), newest first, including owner_ip.
@@ -165,8 +178,8 @@ proc selectAllPastes*(): seq[AdminPasteRow] =
         result.add AdminPasteRow(
             id: r[0], title: r[1],
             size: int64OrZero(r[2]),
-            isTruncated: r[3] != "0" and r[3].len > 0,
-            createdAt: r[4],
+            isTruncated: int64OrZero(r[3]) != 0,
+            createdAt: int64OrZero(r[4]),
             hasBlob: r[5].len > 0,   # blob_id NULL/"" => inline
             visibility: r[6],
             ownerIp: r[7])
@@ -184,7 +197,7 @@ proc insertFile*(f: StoredFile, ownerIp: string) =
         conn().exec(sql"""
             INSERT INTO files (id, original_name, content_type, size, uploaded_at, blob_id, owner_ip, visibility)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """, f.id, f.originalName, f.contentType, $f.size, f.uploadedAt, f.blobId, ownerIp, f.visibility)
+        """, f.id, f.originalName, f.contentType, $f.size, $f.uploadedAt, f.blobId, ownerIp, f.visibility)
 
 proc selectFile*(id: string): Option[StoredFile] =
     ## Fetch a single file's metadata by id, or none if it doesn't exist.
@@ -197,7 +210,7 @@ proc selectFile*(id: string): Option[StoredFile] =
     let stored = StoredFile(
         id: r[0], originalName: r[1], contentType: r[2],
         size: int64OrZero(r[3]),
-        uploadedAt: r[4], blobId: r[5], visibility: r[6])
+        uploadedAt: int64OrZero(r[4]), blobId: r[5], visibility: r[6])
     some(stored)
 
 proc deleteFileRow*(id: string): bool =

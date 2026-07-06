@@ -4,19 +4,10 @@
 ## the one bit of paste logic shared with the create-paste-from-file slice, so it is exported here
 ## (its canonical home) rather than living in a separate service layer.
 
-import std/[json, strutils, unicode, sysrand, strformat]
+import std/[json, strutils, unicode, strformat]
 import ../context
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ratelimit
-
-const IdAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-proc generateId(): string =
-    ## 8 chars from IdAlphabet, using a thread-safe CSPRNG (sysrand).
-    let bytes = urandom(8)
-    result = newStringOfCap(8)
-    for b in bytes:
-        result.add IdAlphabet[int(b) mod IdAlphabet.len]
+       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids
 
 func deriveTitle(content: string, maxChars: int): string =
     ## First non-empty line, trimmed and capped at maxChars chars ("…" appended when cut).
@@ -40,7 +31,7 @@ func buildPreview(content: string, previewChars: int): string =
 
 proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string): Paste =
     ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) on oversize/over-quota.
-    let id = generateId()
+    let id = newId()
     let ttl = if title.strip().len == 0: deriveTitle(content, cfg.untitledTitleMaxChars)
               else: title.strip()
     let byteCount = content.len.int64   # Nim strings are bytes => UTF-8 byte count
@@ -52,7 +43,7 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
 
     ensureWithinQuota(ownerIp, byteCount, cfg.maxStorageBytesPerIp)
 
-    var p = Paste(id: id, title: ttl, size: byteCount, visibility: visibility, createdAt: nowIso())
+    var p = Paste(id: id, title: ttl, size: byteCount, visibility: visibility, createdAt: nowMillis())
     if byteCount <= cfg.inlinePasteMaxBytes:
         p.content = content
         p.isTruncated = false

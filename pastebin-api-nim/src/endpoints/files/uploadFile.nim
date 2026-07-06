@@ -3,7 +3,7 @@
 import std/[options, strformat]
 import ../context, ../../json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../webframework/multipart
+       ../../timeutil, ../../apperrors, ../../ids, ../../webframework/multipart
 
 proc handleUploadFile*(ctx: Ctx) =
     var entries: seq[MultipartEntry]
@@ -33,11 +33,11 @@ proc handleUploadFile*(ctx: Ctx) =
         # Stream the spilled request-body part straight into a blob (flat memory).
         let (blobId, size) = saveFromFile(entry.dataFilePath)
         let f = StoredFile(
-            id: randomHex(6),
+            id: newId(),
             originalName: entry.filename,
             contentType: (if entry.contentType.len == 0: "application/octet-stream" else: entry.contentType),
             size: size,
-            uploadedAt: nowIso(),
+            uploadedAt: nowMillis(),
             visibility: (if visibility == "private": "private" else: "public"),
             blobId: blobId)
         insertFile(f, ctx.ip)

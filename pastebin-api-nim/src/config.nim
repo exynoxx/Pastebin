@@ -1,20 +1,19 @@
 ## Typed application configuration, sourced from environment variables.
 ##
-## Mirrors pastebin-api/models/AppLimits.cs and the env-var overrides read in
-## pastebin-api/program.cs. Every default here is byte-identical to the .NET default so
-## the Nim backend behaves the same when no env vars are set.
+## A few limits that nobody tunes in practice are fixed constants rather than env vars
+## (see loadConfig); the rest fall back to sensible defaults when their env var is unset.
 
 import std/[os, strutils]
 
 type
     AppConfig* = object
-        # --- storage / size limits (AppLimits.cs) ---
-        maxRequestBytes*: int64        # MAX_REQUEST_BYTES        1 GB
+        # --- storage / size limits ---
+        maxRequestBytes*: int64        # fixed 1 GB (keep in sync with nginx client_max_body_size)
         inlinePasteMaxBytes*: int      # INLINE_PASTE_MAX_BYTES   256 KB
-        pastePreviewChars*: int        # PASTE_PREVIEW_CHARS      8192
+        pastePreviewChars*: int        # fixed 8192
         maxPasteBytes*: int64          # MAX_PASTE_BYTES          10 MB
         maxStorageBytesPerIp*: int64   # MAX_STORAGE_BYTES_PER_IP 100 MB
-        untitledTitleMaxChars*: int    # UNTITLED_TITLE_MAX_CHARS 40
+        untitledTitleMaxChars*: int    # fixed 40
 
         # --- framework rate limits (program.cs) ---
         perIpPerMinute*: int           # RATE_LIMIT_PER_IP_PER_MIN     120
@@ -54,12 +53,16 @@ proc getInt(key: string, fallback: int): int =
     int(getLong(key, fallback.int64))
 
 proc loadConfig*(): AppConfig =
-    result.maxRequestBytes       = getLong("MAX_REQUEST_BYTES", 1_073_741_824)
+    # Fixed limits (not env-tunable): nobody has ever needed to change these, so they are
+    # constants rather than config surface. maxRequestBytes must stay in sync with nginx's
+    # client_max_body_size (see CLAUDE.md Gotchas) — change both together and rebuild.
+    result.maxRequestBytes       = 1_073_741_824    # 1 GB
+    result.pastePreviewChars     = 8_192
+    result.untitledTitleMaxChars = 40
+
     result.inlinePasteMaxBytes   = getInt("INLINE_PASTE_MAX_BYTES", 262_144)
-    result.pastePreviewChars     = getInt("PASTE_PREVIEW_CHARS", 8_192)
     result.maxPasteBytes         = getLong("MAX_PASTE_BYTES", 10_485_760)
     result.maxStorageBytesPerIp  = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
-    result.untitledTitleMaxChars = getInt("UNTITLED_TITLE_MAX_CHARS", 40)
 
     result.perIpPerMinute        = getInt("RATE_LIMIT_PER_IP_PER_MIN", 120)
     result.uploadsPerMinute      = getInt("RATE_LIMIT_UPLOADS_PER_MIN", 10)

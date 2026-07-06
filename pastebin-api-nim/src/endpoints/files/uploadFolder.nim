@@ -4,7 +4,7 @@
 ## bounded by the per-IP quota reserved up front. Single-file uploads (the common path) stream.
 
 import std/[strutils, tables, strformat]
-import ../context, ./json
+import ../context, ../../json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../webframework/multipart
 import zippy/ziparchives

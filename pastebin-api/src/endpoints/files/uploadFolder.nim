@@ -7,7 +7,7 @@
 import std/[strutils, tables, strformat]
 import ../context, ../../json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ids, ../../webframework/multipart
+       ../../timeutil, ../../apperrors, ../../ids, webframework/multipart
 import zippy/ziparchives
 
 func zipEntryName(entry: MultipartEntry): string

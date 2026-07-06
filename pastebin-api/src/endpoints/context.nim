@@ -1,5 +1,5 @@
-import ../webframework/httpserver
-import ../webframework/context as fctx
+import webframework/httpserver
+import webframework/context as fctx
 import ../config
 
 export httpserver, config

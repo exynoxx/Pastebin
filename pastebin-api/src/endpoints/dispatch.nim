@@ -6,7 +6,7 @@
 ## see ratelimit.nim). Runs on the server workers. (Admin auth isn't composed here — admin handlers
 ## call requireAdmin upfront; see endpoints/admin/guard.)
 
-import ../webframework/[httpserver, router, middleware, dispatcher]
+import webframework/[httpserver, router, middleware, dispatcher]
 import ../config, ../clientip, ../ratelimit
 import context
 

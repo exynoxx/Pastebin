@@ -16,6 +16,7 @@
 ## amount needed so a delimiter split across two `readBuffer` calls is still found.
 
 import std/[os, strutils, monotimes, strformat]
+import macros
 
 type
     MultipartEntry* = object
@@ -289,7 +290,4 @@ proc cleanupEntries*(entries: seq[MultipartEntry]) =
     ## Best-effort delete of every entry's dataFilePath temp file. Call when done.
     for e in entries:
         if e.dataFilePath.len > 0:
-            try:
-                removeFile(e.dataFilePath)
-            except CatchableError:
-                discard
+            swallowException: removeFile(e.dataFilePath)

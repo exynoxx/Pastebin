@@ -16,6 +16,7 @@
 ## nginx re-uses upstream connections cheaply and the workload is tiny.
 
 import std/[net, os, strutils, monotimes, uri, json]
+import macros
 
 type
     Request* = ref object
@@ -114,11 +115,9 @@ proc respond*(req: Request, statusCode: int, body: string,
     hs.add ("Content-Type", contentType)
     hs.add ("Content-Length", $body.len)
     for h in extraHeaders: hs.add h
-    try:
+    swallowException: # peer may disconnect before/while receiving the response
         writeStatusAndHeaders(req.socket, statusCode, hs)
         req.socket.sendAll(body)
-    except CatchableError:
-        discard # peer disconnected before/while receiving the response
 
 func parseSingleRange(rangeHeader: string, size: int64):
         tuple[ok, satisfiable: bool, first, last: int64] =
@@ -174,12 +173,11 @@ proc respondFile*(req: Request, path, contentType: string,
     var f: File
     if not open(f, path, fmRead):
         let body = $(%*{"error": "Not found"})
-        try:
+        swallowException:
             writeStatusAndHeaders(req.socket, 404,
                 @[("Content-Type", "application/json; charset=utf-8"),
                     ("Content-Length", $body.len)])
             req.socket.sendAll(body)
-        except CatchableError: discard
         return
     defer: f.close()
 
@@ -190,7 +188,7 @@ proc respondFile*(req: Request, path, contentType: string,
     if contentDisposition.len > 0: hs.add ("Content-Disposition", contentDisposition)
     if noSniff: hs.add ("X-Content-Type-Options", "nosniff")
 
-    try:
+    swallowException: # peer may disconnect mid-stream
         let r = parseSingleRange(rangeHeader, size)
         if r.ok and not r.satisfiable:
             hs.add ("Content-Range", "bytes */" & $size)
@@ -207,8 +205,6 @@ proc respondFile*(req: Request, path, contentType: string,
             hs.add ("Content-Length", $size)
             writeStatusAndHeaders(req.socket, 200, hs)
             streamFileRange(req.socket, f, 0, size)
-    except CatchableError:
-        discard # peer disconnected mid-stream
 
 # ---- request reading -------------------------------------------------------
 
@@ -313,15 +309,12 @@ proc handleConnection(sock: Socket, remote: string) =
         if not req.responded:
             req.respond(500, $(%*{"error": "No response"}))
     except CatchableError:
-        try:
+        swallowException:
             if not req.responded: req.respond(500, $(%*{"error": "Internal server error"}))
-        except CatchableError: discard
     finally:
         if bodyTemp.len > 0:
-            try: removeFile(bodyTemp)
-            except CatchableError: discard
-        try: sock.close()
-        except CatchableError: discard
+            swallowException: removeFile(bodyTemp)
+        swallowException: sock.close()
 
 # ---- server loop -----------------------------------------------------------
 

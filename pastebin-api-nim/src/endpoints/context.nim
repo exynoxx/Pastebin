@@ -1,9 +1,3 @@
-## App request context — specialises the framework's generic context for this service. Endpoint
-## handlers `import ../context` and get, from one import: `Ctx` (bound to this app's config),
-## `Request`, `respond`/`respondFile`, `AppConfig`, and `errorJson`/`respondError`. JSON response
-## builders are no longer central: each lives in its own vertical slice (e.g. endpoints/files/json,
-## or inline in the handler). Rate-limit rejection helpers live with their logic in ratelimit.nim.
-
 import ../webframework/httpserver
 import ../webframework/context as fctx
 import ../config

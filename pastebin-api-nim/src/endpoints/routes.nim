@@ -1,9 +1,3 @@
-## The endpoint map — the one place that shows every route the API serves, in the spirit of an
-## ASP.NET minimal-API `Program.cs`. Each line is: verb, path (with {param}s), handler, and the
-## optional `upload` flag (uploads rate-limit policy). Every handler body lives one-per-file under
-## endpoints/<feature>/. Admin routes gate themselves — each handler calls requireAdmin upfront
-## (endpoints/admin/guard) rather than declaring a flag here.
-
 import dispatch
 
 import

@@ -101,18 +101,13 @@ proc conn(): DbConn =
         tlOpen = true
     tlConn
 
-template withWriteLock(body: untyped): untyped =
-    ## Serialise writers process-wide (single-writer WAL discipline).
-    withLock gWriteLock:
-        body
-
 # ---- typed operations (the public reader API) ------------------------------
 # Everything below returns/accepts domain types from types.nim; no SQL, row, or
 # column index escapes this module.
 
 proc insertPaste*(p: Paste, ownerIp: string) =
     ## Persist a paste row. blob_id is stored as SQL NULL for inline pastes (blobId == "").
-    withWriteLock:
+    withLock gWriteLock:  # serialise writers process-wide (single-writer WAL discipline)
         if p.blobId.len == 0:
             conn().exec(sql"""
                 INSERT INTO pastes (id, title, content, size, is_truncated, created_at, blob_id, owner_ip, visibility)
@@ -179,13 +174,13 @@ proc selectAllPastes*(): seq[AdminPasteRow] =
 proc deletePasteRow*(id: string): bool =
     ## Delete a paste's row; true when a row was actually removed.
     var affected: int64 = 0
-    withWriteLock:
+    withLock gWriteLock:
         affected = conn().execAffectedRows(sql"DELETE FROM pastes WHERE id = ?;", id)
     affected > 0
 
 proc insertFile*(f: StoredFile, ownerIp: string) =
     ## Persist a file metadata row (the blob itself is written separately by the blob store).
-    withWriteLock:
+    withLock gWriteLock:
         conn().exec(sql"""
             INSERT INTO files (id, original_name, content_type, size, uploaded_at, blob_id, owner_ip, visibility)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
@@ -208,7 +203,7 @@ proc selectFile*(id: string): Option[StoredFile] =
 proc deleteFileRow*(id: string): bool =
     ## Delete a file's metadata row; true when a row was actually removed.
     var affected: int64 = 0
-    withWriteLock:
+    withLock gWriteLock:
         affected = conn().execAffectedRows(sql"DELETE FROM files WHERE id = ?;", id)
     affected > 0
 

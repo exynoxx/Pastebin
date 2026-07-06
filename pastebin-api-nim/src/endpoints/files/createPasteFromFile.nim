@@ -8,9 +8,12 @@ import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =
     let root = parseJsonBodyOr400(ctx)
-    if ctx.rejectPasteLimit(checkPasteCreate(ctx.ip)): return
     let fileId = root{"fileId"}.getStr("")
+    # Resolve the file BEFORE the paste rate-limit check: checkPasteCreate records into the burst
+    # window / trips the penalty box, so a run of requests with a bad fileId must not consume that
+    # budget (or penalty-box the IP) when no paste is ever created.
     let f = fetchOr404(ctx, selectFile(fileId), "File not found")
+    if ctx.rejectPasteLimit(checkPasteCreate(ctx.ip)): return
     let reqTitle = root{"title"}.getStr("")
     let title = if reqTitle.strip().len == 0: f.originalName else: reqTitle.strip()
     let visibility = root{"visibility"}.getStr("public")

@@ -1,10 +1,11 @@
 ## DELETE /api/files/{id} — delete a file and its backing blob.
 
 import std/[json, options]
-import ../context
+import ../context, ../admin/guard
 import ../../types, ../../db, ../../blobstore
 
 proc handleDeleteFile*(ctx: Ctx) =
+    if not ctx.requireAdmin(): return
     let f = fetchOr404(ctx, selectFile(ctx.params[0]), "File not found")
     if f.blobId.len > 0:
         discard deleteBlob(f.blobId)

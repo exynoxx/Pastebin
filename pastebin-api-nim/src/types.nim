@@ -41,12 +41,14 @@ type
         visibility*: string    ## "public" => listed in recent list; "private" => unlisted (direct link only)
         blobId*: string        ## internal. Never emitted in JSON.
 
-    # Result of resolving a downloadable blob/inline paste.
-    # Either backed by an on-disk blob (dkBlob) or by in-memory bytes (dkInline).
-    DownloadKind* = enum dkBlob, dkInline
+    # Result of resolving a downloadable file to its on-disk blob.
     DownloadData* = object
         contentType*: string
         fileName*: string
-        case kind*: DownloadKind
-        of dkBlob:   blobPath*: string   ## on-disk blob path
-        of dkInline: inlineData*: string ## in-memory bytes
+        blobPath*: string   ## on-disk blob path
+
+func normalizeVisibility*(v: string): string =
+    ## The single source of truth for the two-valued visibility field: anything that isn't the
+    ## literal "private" is treated as "public". Shared by every create/upload handler so the
+    ## rule isn't re-spelled (and can't drift) across the slices.
+    if v == "private": "private" else: "public"

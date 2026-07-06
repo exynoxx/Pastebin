@@ -38,7 +38,7 @@ proc handleUploadFile*(ctx: Ctx) =
             contentType: (if entry.contentType.len == 0: "application/octet-stream" else: entry.contentType),
             size: size,
             uploadedAt: nowMillis(),
-            visibility: (if visibility == "private": "private" else: "public"),
+            visibility: normalizeVisibility(visibility),
             blobId: blobId)
         insertFile(f, ctx.ip)
         notifyFileUploaded(f)

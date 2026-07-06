@@ -35,7 +35,7 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
     let ttl = if title.strip().len == 0: deriveTitle(content, cfg.untitledTitleMaxChars)
               else: title.strip()
     let byteCount = content.len.int64   # Nim strings are bytes => UTF-8 byte count
-    let visibility = if visibilityIn == "private": "private" else: "public"
+    let visibility = normalizeVisibility(visibilityIn)
 
     if byteCount > cfg.maxPasteBytes:
         raise newException(PayloadTooLargeError,
@@ -55,11 +55,27 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
         p.isTruncated = true
         p.blobId = blobId
 
-    insertPaste(p, ownerIp)
+    # Persist last. If the insert fails (e.g. the astronomically unlikely PK collision), delete the
+    # blob we just wrote so a failed create can't orphan a blob on disk.
+    try:
+        insertPaste(p, ownerIp)
+    except CatchableError:
+        if p.blobId.len > 0: discard deleteBlob(p.blobId)
+        raise
     notifyPasteCreated(p)
     p
 
 proc handleCreatePaste*(ctx: Ctx) =
+    # Bound the body BEFORE it's read into a string and parsed into a node tree — otherwise a
+    # multi-hundred-MB JSON POST (allowed by the 1 GB MAX_REQUEST_BYTES) is fully materialised and
+    # parsed before the maxPasteBytes check in createPasteRecord, blowing the container memory cap.
+    # The cap leaves generous headroom over maxPasteBytes for the JSON envelope + string escaping,
+    # so a legitimate max-size paste is never rejected here (the exact content check runs later).
+    if ctx.req.bodyLen > ctx.cfg.maxPasteBytes * 2 + 65_536:
+        ctx.respondError(413,
+            "Paste size exceeds the maximum allowed size of " &
+            $(ctx.cfg.maxPasteBytes div (1024*1024)) & "MB")
+        return
     let root = parseJsonBodyOr400(ctx)
     let content = root{"content"}.getStr("")
     if content.strip().len == 0:

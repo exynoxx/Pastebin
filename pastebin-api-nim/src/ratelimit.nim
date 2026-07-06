@@ -86,8 +86,10 @@ proc initRateLimiter*(cfg: AppConfig) =
     gPastePenaltySeconds         = max(0, cfg.pastePenaltySec)
     gPastePenaltyIntervalSeconds = max(1, cfg.pastePenaltyIntervalSec)
 
-proc slidingTry(st: SlidingState, nowSec, limit: int64): bool =
-    ## Segmented sliding-window counter. Caller holds gLock.
+proc slidingRoll(st: SlidingState, nowSec: int64) =
+    ## Advance the segmented window to `nowSec`, zeroing segments that rotated out. Pure time
+    ## advancement — consumes no budget — so it's safe to run before deciding to admit. Caller
+    ## holds gLock.
     let seg = nowSec div SegLenSec
     if seg != st.lastSeg:
         let diff = seg - st.lastSeg
@@ -98,20 +100,25 @@ proc slidingTry(st: SlidingState, nowSec, limit: int64): bool =
             for d in 1 .. diff:
                 st.counts[int((st.lastSeg + d) mod Segments)] = 0
         st.lastSeg = seg
+
+proc slidingWouldAllow(st: SlidingState, limit: int64): bool =
+    ## True if the window (already rolled) has room. Read-only. Caller holds gLock.
     var total = 0
     for c in st.counts: total += c
-    if total.int64 >= limit: return false
-    st.counts[int(seg mod Segments)].inc
-    true
+    total.int64 < limit
 
-proc fixedTry(st: FixedState, nowSec, limit: int64): bool =
+proc slidingCommit(st: SlidingState) =
+    ## Record one request in the current segment. Caller holds gLock.
+    st.counts[int(st.lastSeg mod Segments)].inc
+
+proc fixedRoll(st: FixedState, nowSec: int64) =
     let winStart = (nowSec div WindowSec) * WindowSec
     if st.windowStart != winStart:
         st.windowStart = winStart
         st.count = 0
-    if st.count.int64 >= limit: return false
-    st.count.inc
-    true
+
+proc fixedWouldAllow(st: FixedState, limit: int64): bool = st.count.int64 < limit
+proc fixedCommit(st: FixedState) = st.count.inc
 
 proc maybeSweep(nowSec: int64) =
     ## Drop idle per-IP entries so the table can't grow unbounded; runs at most once per window.
@@ -147,19 +154,24 @@ const Rejected = AcquireResult(allowed: false, concurrencyHeld: false)
 proc tryAcquire*(ip: string, isUpload: bool): AcquireResult =
     ## Applies the chained global limiters (+ uploads policy). On success the caller MUST call
     ## `releaseConcurrency` when the request finishes.
+    ##
+    ## Check ALL tiers first, commit only once every tier admits: a rejection at any tier must not
+    ## consume slots in the others. (Previously the per-IP/global sliding windows were incremented
+    ## as a side effect before the concurrency check, so a request rejected for concurrency still
+    ## burned — and never returned — the caller's per-minute budget.)
     withIpState(ip, nowSec, st):
-        if not slidingTry(st.req, nowSec, gPerIpLimit.int64):
-            return Rejected
+        slidingRoll(st.req, nowSec)
+        slidingRoll(gGlobal, nowSec)
+        if isUpload: fixedRoll(st.up, nowSec)
 
-        if not slidingTry(gGlobal, nowSec, gGlobalLimit.int64):
-            return Rejected
+        if not slidingWouldAllow(st.req, gPerIpLimit.int64): return Rejected
+        if not slidingWouldAllow(gGlobal, gGlobalLimit.int64): return Rejected
+        if gConcurrent >= gConcurrencyLimit: return Rejected
+        if isUpload and not fixedWouldAllow(st.up, gUploadsLimit.int64): return Rejected
 
-        if gConcurrent >= gConcurrencyLimit:
-            return Rejected
-
-        if isUpload and not fixedTry(st.up, nowSec, gUploadsLimit.int64):
-            return Rejected
-
+        slidingCommit(st.req)
+        slidingCommit(gGlobal)
+        if isUpload: fixedCommit(st.up)
         gConcurrent.inc
         return AcquireResult(allowed: true, concurrencyHeld: true)
 

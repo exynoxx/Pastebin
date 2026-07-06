@@ -1,12 +1,15 @@
 ## Admin-API auth for the admin slice. A short admin token is only safe if guessing is made
-## expensive, so `requireAdmin` layers two defenses on every X-Admin-Token check:
+## expensive, so `requireAdmin` defends every X-Admin-Token check with an escalating per-IP
+## lockout: the FIRST failed attempt already locks the IP for BaseCooldownSec, and each further
+## failure doubles the cooldown (2s, 4s, 8s, … capped at 5 min). While an IP is in its cooldown,
+## attempts are rejected INSTANTLY with 429 + Retry-After — no worker thread is held.
 ##
-##   1. Escalating per-IP lockout — each failed attempt sets a cooldown that doubles
-##      (2s, 4s, 8s, … capped at 5 min). While an IP is in its cooldown, further attempts are
-##      rejected INSTANTLY with 429 + Retry-After — no worker thread is held, so an attacker
-##      can't exhaust Mummy's small pool by hammering wrong tokens.
-##   2. A small fixed delay on the failing request itself (AdminFailPenaltyMs), so even the
-##      first guess in a window costs real latency and token comparison is constant-time.
+## The lockout deliberately does NO blocking sleep on the failing request. An earlier version
+## slept AdminFailPenaltyMs on the worker thread on every failure; because an IP's *first* attempt
+## isn't yet locked out, an attacker spraying wrong tokens from many IPs could tie up the whole
+## small worker pool one 500 ms sleep at a time — the very pool-exhaustion the lockout exists to
+## prevent. The lockout (first failure ⇒ immediate cooldown) rate-limits guesses without holding a
+## thread, and constantTimeEq keeps the comparison itself timing-safe.
 ##
 ## A successful auth clears the IP's counter. Mirrors ratelimit.nim's locking model: one
 ## process-wide lock guards the state Table, which is shared across all worker threads under ORC.
@@ -15,13 +18,12 @@
 ## with no on-the-way-out work, so admin handlers call it as their first line — mirroring
 ## ratelimit.rejectPasteLimit — rather than wrapping the request in the middleware chain.
 
-import std/[tables, locks, times, os]
+import std/[tables, locks, times]
 import ../context
 
 const
     BaseCooldownSec* = 2        ## first failed attempt locks the IP for this long
     MaxCooldownSec*  = 300      ## cap on the doubling cooldown (5 minutes)
-    AdminFailPenaltyMs* = 500   ## fixed added latency on each rejected attempt
 
 type
     AdminGate = object
@@ -94,8 +96,8 @@ func constantTimeEq(a, b: string): bool =
 proc requireAdmin*(ctx: Ctx): bool =
     ## Fail-closed admin auth, called as the first line of every admin handler. Returns true when
     ## the caller holds a valid X-Admin-Token. On failure it has already responded — 429 while the
-    ## IP is locked out, else 401 (+ a fixed penalty and a recorded failure) — so the handler just
-    ## `return`s. An unset ADMIN_TOKEN rejects everything (fail-closed).
+    ## IP is locked out, else 401 (and a recorded failure that arms the cooldown) — so the handler
+    ## just `return`s. An unset ADMIN_TOKEN rejects everything (fail-closed).
     let gate = adminPrecheck(ctx.ip)
     if gate.lockedOut:
         ctx.req.respond(429, errorJson("Too many failed admin attempts. Try again later."),
@@ -104,7 +106,6 @@ proc requireAdmin*(ctx: Ctx): bool =
     if ctx.cfg.adminToken.len == 0 or
        not constantTimeEq(ctx.req.header("X-Admin-Token"), ctx.cfg.adminToken):
         registerAdminFailure(ctx.ip)
-        sleep(AdminFailPenaltyMs)
         ctx.req.respond(401, errorJson("Unauthorized"))
         return false
     clearAdminFailures(ctx.ip)

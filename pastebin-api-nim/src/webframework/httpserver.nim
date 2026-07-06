@@ -15,8 +15,9 @@
 ## (`Connection: close`). No keep-alive / pipelining keeps the state machine trivial and correct;
 ## nginx re-uses upstream connections cheaply and the workload is tiny.
 
-import std/[net, os, strutils, monotimes, uri, json]
+import std/[net, os, strutils, uri, json]
 import macros
+import tmpfile
 
 type
     Request* = ref object
@@ -65,19 +66,23 @@ proc header*(req: Request, name: string): string =
             return v
     ""
 
-proc uniqueTempPath(): string   # fwd decl (defined below, near request reading)
-
 proc bodyString*(req: Request): string =
     ## Full request body in memory, reading the spill file if the body was spilled to disk.
     ## For endpoints that must parse the whole body (e.g. JSON). Bounded by the route's limits.
     if req.bodyFilePath.len > 0: readFile(req.bodyFilePath) else: req.body
+
+proc bodyLen*(req: Request): int64 =
+    ## Byte length of the full body WITHOUT reading it into memory — the spill file's size when
+    ## spilled, else the in-memory body length. Lets handlers reject an oversize body before the
+    ## whole thing is materialised/parsed (e.g. createPaste's pre-parse size guard).
+    if req.bodyFilePath.len > 0: getFileSize(req.bodyFilePath) else: req.body.len.int64
 
 proc bodyFile*(req: Request): string =
     ## Path to a file holding the full body, materialising one from the in-memory body when the
     ## body wasn't spilled. Sets req.bodyFilePath so the server's cleanup removes it. Used for
     ## streaming multipart parsing.
     if req.bodyFilePath.len == 0:
-        let p = uniqueTempPath()
+        let p = uniqueTempPath("pb-body")
         writeFile(p, req.body)
         req.bodyFilePath = p
         req.body = ""
@@ -208,13 +213,6 @@ proc respondFile*(req: Request, path, contentType: string,
 
 # ---- request reading -------------------------------------------------------
 
-proc uniqueTempPath(): string =
-    var n {.global.}: int
-    # No PRNG (Math.random is unavailable): pid + monotonic ticks + a counter.
-    inc n
-    getTempDir() / ("pb-body-" & $getCurrentProcessId() & "-" &
-        $getMonoTime().ticks & "-" & $n & ".tmp")
-
 proc handleConnection(sock: Socket, remote: string) =
     ## Reads exactly one request, dispatches it, cleans up. Never raises.
     var req = Request(socket: sock, remoteAddress: remote)
@@ -274,7 +272,7 @@ proc handleConnection(sock: Socket, remote: string) =
         if contentLength > 0:
             if contentLength > gBodySpillThreshold.int64:
                 # Spill to a temp file, streaming from the socket in bounded chunks.
-                bodyTemp = uniqueTempPath()
+                bodyTemp = uniqueTempPath("pb-body")
                 req.bodyFilePath = bodyTemp
                 let outF = open(bodyTemp, fmWrite)
                 var received: int64 = 0
@@ -306,8 +304,12 @@ proc handleConnection(sock: Socket, remote: string) =
         swallowException:
             if not req.responded: req.respond(500, $(%*{"error": "Internal server error"}))
     finally:
-        if bodyTemp.len > 0:
-            swallowException: removeFile(bodyTemp)
+        # Remove the body temp file however it came to exist: either the spill path above
+        # (bodyTemp) or one that bodyFile() materialised for a small in-memory body. Both live in
+        # req.bodyFilePath, so cleaning that up covers the small-upload case too (previously only
+        # the spill path was removed, orphaning a temp file on every small multipart upload).
+        if req.bodyFilePath.len > 0:
+            swallowException: removeFile(req.bodyFilePath)
         swallowException: sock.close()
 
 # ---- server loop -----------------------------------------------------------

@@ -1,7 +1,8 @@
 ## POST /api/files/upload-folder — multipart multi-file upload, archived into a single zip.
 ##
-## LIMITATION: zippy has no streaming zip writer, so entry contents are read into memory here,
-## bounded by the per-IP quota reserved up front. Single-file uploads (the common path) stream.
+## LIMITATION: zippy has no streaming zip writer, so entry contents are read into memory here.
+## Peak RAM is bounded by MAX_FOLDER_UPLOAD_BYTES (checked up front), kept well under the
+## container memory cap. Single-file uploads (the common path) stream and aren't affected.
 
 import std/[strutils, tables, strformat]
 import ../context, ../../json
@@ -52,9 +53,11 @@ proc handleUploadFolder*(ctx: Ctx) =
     try:
         var uncompressedTotal: int64 = 0
         for e in fileParts: uncompressedTotal += e.size
-        if uncompressedTotal > ctx.cfg.maxRequestBytes:
+        # Bound against the folder-specific limit, NOT the 1 GB request cap: the whole archive is
+        # built in memory (zippy has no streaming writer), so this is what keeps peak RAM in check.
+        if uncompressedTotal > ctx.cfg.maxFolderUploadBytes:
             raise newException(PayloadTooLargeError,
-                &"Folder size exceeds the maximum allowed size of {ctx.cfg.maxRequestBytes div (1024*1024)}MB")
+                &"Folder size exceeds the maximum allowed size of {ctx.cfg.maxFolderUploadBytes div (1024*1024)}MB")
         ensureWithinQuota(ctx.ip, uncompressedTotal, ctx.cfg.maxStorageBytesPerIp)
         var zipEntries: OrderedTable[string, string]
         for e in fileParts:
@@ -67,7 +70,7 @@ proc handleUploadFolder*(ctx: Ctx) =
             contentType: "application/zip",
             size: size,
             uploadedAt: nowMillis(),
-            visibility: (if visibility == "private": "private" else: "public"),
+            visibility: normalizeVisibility(visibility),
             blobId: blobId)
         insertFile(f, ctx.ip)
         notifyFileUploaded(f)

@@ -15,8 +15,9 @@
 ## The scan carries over the last `needle.len - 1` bytes between chunk reads, which is exactly the
 ## amount needed so a delimiter split across two `readBuffer` calls is still found.
 
-import std/[os, strutils, monotimes, strformat]
+import std/[os, strutils, strformat]
 import macros
+import tmpfile
 
 type
     MultipartEntry* = object
@@ -166,24 +167,11 @@ func parseDisposition(paramsPart: string): tuple[name, filename: string, hasFile
             result.filename = v
             result.hasFilename = true
 
-var gTempSeq: int  ## process-local, monotonically increasing — never repeats within a run.
-
-proc uniqueTempPath(): string =
-    ## Unique temp path under getTempDir() built WITHOUT relying on a PRNG: process id +
-    ## monotonic clock ticks + an incrementing counter. Even under a concurrent-request race on
-    ## the counter, the monotonic ticks differ, so collisions are not realistically possible.
-    inc gTempSeq
-    getTempDir() / (&"pastebin-mp-{getCurrentProcessId()}-{getMonoTime().ticks}-{gTempSeq}.tmp")
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-proc parseMultipart*(bodyPath: string, contentTypeHeader: string): seq[MultipartEntry] =
-    ## Parses the multipart body stored at `bodyPath`, using the boundary from
-    ## `contentTypeHeader` (e.g. `multipart/form-data; boundary=----WebKitFormBoundaryXYZ`).
-    ## File parts (filename present) are streamed to their own temp files (dataFilePath);
-    ## non-file parts are captured in `value`. Raises `MultipartError` on malformed input.
+proc parseMultipartImpl(result: var seq[MultipartEntry], bodyPath, contentTypeHeader: string) =
     let boundary = extractBoundary(contentTypeHeader)
     if boundary.len == 0:
         raise newException(MultipartError, "no multipart boundary in Content-Type header")
@@ -239,9 +227,11 @@ proc parseMultipart*(bodyPath: string, contentTypeHeader: string): seq[Multipart
         # --- part body (up to the next delimiter) ---
         if pHasFilename:
             entry.isFile = true
-            let tmpPath = uniqueTempPath()
-            entry.dataFilePath = tmpPath
-            let outF = open(tmpPath, fmWrite)
+            entry.dataFilePath = uniqueTempPath("pastebin-mp")
+            # Register the entry BEFORE streaming so a raise mid-part (or in a later part) still
+            # exposes this temp file to the caller's cleanup — the size is patched in below.
+            result.add entry
+            let outF = open(entry.dataFilePath, fmWrite)
             var sz: int64 = 0
             # Hold back exactly one byte: the body's final byte is the CRLF's stray "\r" for a spec
             # body and must be trimmed, but is genuine content for an LF-only body.
@@ -269,7 +259,7 @@ proc parseMultipart*(bodyPath: string, contentTypeHeader: string): seq[Multipart
                     one[0] = heldByte
                     writeExact(outF, one, 0, 0)
                     sz += 1
-            entry.size = sz
+            result[^1].size = sz   # patch the size onto the already-registered entry
         else:
             entry.isFile = false
             var val = ""
@@ -283,11 +273,23 @@ proc parseMultipart*(bodyPath: string, contentTypeHeader: string): seq[Multipart
             if val.len > 0 and val[^1] == '\r':
                 val.setLen(val.len - 1)
             entry.value = val
-
-        result.add entry
+            result.add entry
 
 proc cleanupEntries*(entries: seq[MultipartEntry]) =
     ## Best-effort delete of every entry's dataFilePath temp file. Call when done.
     for e in entries:
         if e.dataFilePath.len > 0:
             swallowException: removeFile(e.dataFilePath)
+
+proc parseMultipart*(bodyPath: string, contentTypeHeader: string): seq[MultipartEntry] =
+    ## Parses the multipart body stored at `bodyPath`, using the boundary from
+    ## `contentTypeHeader` (e.g. `multipart/form-data; boundary=----WebKitFormBoundaryXYZ`).
+    ## File parts (filename present) are streamed to their own temp files (dataFilePath);
+    ## non-file parts are captured in `value`. Raises `MultipartError` on malformed input — and
+    ## on that path deletes any part temp files already written, so a malformed upload can't
+    ## orphan temp files (the caller's `entries` seq is never assigned when parsing raises).
+    try:
+        parseMultipartImpl(result, bodyPath, contentTypeHeader)
+    except CatchableError:
+        cleanupEntries(result)
+        raise

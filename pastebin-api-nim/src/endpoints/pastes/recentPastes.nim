@@ -12,10 +12,17 @@ func summariesJson(items: seq[PasteSummary]): string =
     for s in items: arr.add pasteSummaryNode(s)
     $arr
 
+const
+    DefaultLimit = 10
+    MaxLimit = 100
+
 proc handleRecentPastes*(ctx: Ctx) =
-    var limit = 10
+    var limit = DefaultLimit
     let lp = ctx.req.queryParam("limit")
     if lp.len > 0:
         try: limit = parseInt(lp)
-        except ValueError: limit = 10
+        except ValueError: limit = DefaultLimit
+    # Clamp: parseInt("-1") succeeds without raising, and SQLite treats a negative LIMIT as
+    # unbounded — so an unclamped ?limit=-1 would dump the entire pastes+files union.
+    limit = max(1, min(limit, MaxLimit))
     ctx.req.respond(200, summariesJson(selectRecentSummaries(limit)))

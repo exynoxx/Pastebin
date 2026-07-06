@@ -34,11 +34,14 @@ proc worker() {.thread.} =
     # gServer/gTopic/gPublicBase are set once in initNtfy before this thread starts and only
     # read here, so the global-access is safe despite Nim's conservative gcsafe check.
     {.cast(gcsafe).}:
+        # One client for the lifetime of the (single) worker thread: httpclient reuses the
+        # keep-alive connection, so we don't redo DNS/TLS/connection setup on every notification.
+        let client = newHttpClient(timeout = 5000)
+        client.headers = newHttpHeaders({"Content-Type": "application/json"})
+        defer: client.close()
         while true:
             let msg = gChan.recv()
             try:
-                let client = newHttpClient(timeout = 5000)
-                defer: client.close()
                 let payload = %*{
                     "topic": gTopic,
                     "title": msg.title,
@@ -47,7 +50,6 @@ proc worker() {.thread.} =
                     "tags": ["memo"],
                     "priority": 3,
                 }
-                client.headers = newHttpHeaders({"Content-Type": "application/json"})
                 discard client.request(gServer, HttpPost, body = $payload)
             except CatchableError:
                 discard # swallow: ntfy must never affect the request path

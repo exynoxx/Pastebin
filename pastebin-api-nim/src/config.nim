@@ -13,6 +13,7 @@ type
         pastePreviewChars*: int        # fixed 8192
         maxPasteBytes*: int64          # MAX_PASTE_BYTES          10 MB
         maxStorageBytesPerIp*: int64   # MAX_STORAGE_BYTES_PER_IP 100 MB
+        maxFolderUploadBytes*: int64   # MAX_FOLDER_UPLOAD_BYTES  25 MB
         untitledTitleMaxChars*: int    # fixed 40
 
         # --- framework rate limits ---
@@ -30,7 +31,7 @@ type
         # --- ntfy ---
         ntfyServerUrl*: string         # NTFY_SERVER_URL   https://ntfy.sh
         ntfyTopic*: string             # NTFY_TOPIC        "" => disabled
-        publicBaseUrl*: string         # PUBLIC_BASE_URL   "" => links relative/incomplete
+        publicBaseUrl*: string         # PUBLIC_BASE_URL   absolute site URL (for notification links)
 
         # --- admin ---
         adminToken*: string            # ADMIN_TOKEN       "" => admin endpoints disabled (fail-closed)
@@ -63,6 +64,10 @@ proc loadConfig*(): AppConfig =
     result.inlinePasteMaxBytes   = getInt("INLINE_PASTE_MAX_BYTES", 262_144)
     result.maxPasteBytes         = getLong("MAX_PASTE_BYTES", 10_485_760)
     result.maxStorageBytesPerIp  = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
+    # Folder uploads are zipped in memory (zippy has no streaming writer), so this caps the
+    # uncompressed total to keep peak RAM well under the container memory limit — a real memory
+    # bound, distinct from the much larger per-IP storage quota.
+    result.maxFolderUploadBytes  = getLong("MAX_FOLDER_UPLOAD_BYTES", 26_214_400)  # 25 MB
 
     result.perIpPerMinute        = getInt("RATE_LIMIT_PER_IP_PER_MIN", 120)
     result.uploadsPerMinute      = getInt("RATE_LIMIT_UPLOADS_PER_MIN", 10)
@@ -76,7 +81,9 @@ proc loadConfig*(): AppConfig =
 
     result.ntfyServerUrl = getEnv("NTFY_SERVER_URL", "https://ntfy.sh")
     result.ntfyTopic     = getEnv("NTFY_TOPIC", "")
-    result.publicBaseUrl = getEnv("PUBLIC_BASE_URL", "")
+    # Absolute base for links embedded in ntfy notifications; default to the live public URL so a
+    # fresh deploy produces working (not relative/broken) links without extra config.
+    result.publicBaseUrl = getEnv("PUBLIC_BASE_URL", "https://rpi.deer-hue.ts.net")
 
     result.adminToken      = getEnv("ADMIN_TOKEN", "")
 

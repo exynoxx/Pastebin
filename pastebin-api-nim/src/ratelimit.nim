@@ -63,6 +63,16 @@ var
     gPasteBurstLimit, gPasteWindowSeconds, gPastePenaltySeconds, gPastePenaltyIntervalSeconds: int
     gLastSweep: int64
 
+template withIpState(ip: string; nowSec, st, body: untyped) =
+    ## The shared preamble of every per-IP policy check: take the process lock, sweep idle entries,
+    ## and fetch this IP's state. Injects `nowSec` (current unix second) and `st` (its IpState) into
+    ## `body`, and releases the lock on any exit (including `return`).
+    let nowSec = getTime().toUnix()
+    withLock gLock:
+        maybeSweep(nowSec)
+        let st = ipState(ip, nowSec)
+        body
+
 proc initRateLimiter*(cfg: AppConfig) =
     initLock(gLock)
     gIps = initTable[string, IpState]()
@@ -126,16 +136,6 @@ proc ipState(ip: string, nowSec: int64): IpState =
             recent: initDeque[int64]())
     result = gIps[ip]
     result.lastSeen = nowSec
-
-template withIpState(ip: string; nowSec, st, body: untyped) =
-    ## The shared preamble of every per-IP policy check: take the process lock, sweep idle entries,
-    ## and fetch this IP's state. Injects `nowSec` (current unix second) and `st` (its IpState) into
-    ## `body`, and releases the lock on any exit (including `return`).
-    let nowSec = getTime().toUnix()
-    withLock gLock:
-        maybeSweep(nowSec)
-        let st = ipState(ip, nowSec)
-        body
 
 # ---- request rate limiting + overload protection ---------------------------
 

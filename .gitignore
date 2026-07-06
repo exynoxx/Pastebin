@@ -17,3 +17,4 @@ build/
 
 # Backend backups (rollback insurance)
 backups/
+CODE_REVIEW.md

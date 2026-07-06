@@ -23,16 +23,6 @@ type
     Handler*[E] = proc(ctx: Ctx[E]) {.nimcall.}
         ## Uniform handler signature the router dispatches to.
 
-func errorJson*(msg: string): string =
-    ## The shared error envelope emitted across the API: {"error": "..."}.
-    $(%*{"error": msg})
-
-proc respondError*(req: Request, code: int, msg: string) =
-    req.respond(code, errorJson(msg))
-
-proc respondError*[E](ctx: Ctx[E], code: int, msg: string) =
-    ctx.req.respond(code, errorJson(msg))
-
 # ---- handler control-flow templates ----------------------------------------
 # These early-`return` from the enclosing handler, so they must be templates, not procs.
 # `isNone`/`get` are resolved at the call site (every handler using fetchOr404 imports std/options).
@@ -54,3 +44,13 @@ template parseJsonBodyOr400*(ctx: untyped): JsonNode =
         ctx.respondError(400, "Invalid request body")
         return
     node
+
+func errorJson*(msg: string): string =
+    ## The shared error envelope emitted across the API: {"error": "..."}.
+    $(%*{"error": msg})
+
+proc respondError*(req: Request, code: int, msg: string) =
+    req.respond(code, errorJson(msg))
+
+proc respondError*[E](ctx: Ctx[E], code: int, msg: string) =
+    ctx.req.respond(code, errorJson(msg))

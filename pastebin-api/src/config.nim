@@ -8,7 +8,7 @@ import std/[os, strutils]
 type
     AppConfig* = object
         # --- storage / size limits ---
-        maxRequestBytes*: int64        # fixed 1 GB (keep in sync with nginx client_max_body_size)
+        maxRequestBytes*: int64        # MAX_REQUEST_BYTES  raw request-body cap, ~51 MB (keep in sync with nginx client_max_body_size)
         inlinePasteMaxBytes*: int      # INLINE_PASTE_MAX_BYTES   256 KB
         pastePreviewChars*: int        # fixed 8192
         maxPasteBytes*: int64          # MAX_PASTE_BYTES          10 MB
@@ -42,6 +42,9 @@ type
         port*: int                     # PORT              8080
         workerThreads*: int            # WORKER_THREADS     tuned below the Pi's cores*10
         networkLog*: bool              # NETWORK_LOG        default true
+        accessLogPath*: string         # ACCESS_LOG_PATH        "" => disabled
+        accessLogMaxBytes*: int64      # ACCESS_LOG_MAX_BYTES   5 MB (size-based rotation)
+        accessLogFlushMs*: int         # ACCESS_LOG_FLUSH_MS    5000 (buffer flush interval)
 
 proc getLong(key: string, fallback: int64): int64 =
     ## Parse an env var or fall back to a default. Base-10.
@@ -51,7 +54,11 @@ proc getLong(key: string, fallback: int64): int64 =
     except ValueError: fallback
 
 proc loadConfig*(): AppConfig =
-    result.maxRequestBytes         = 1_073_741_824    # 1 GB
+    # Raw request-body cap, rejected early on Content-Length before the body is streamed/spilled
+    # (the DoS guard: an oversize upload never reaches disk). ~51 MB = MAX_FILE_UPLOAD_BYTES (50 MB)
+    # plus multipart-envelope headroom, so a full 50 MB file isn't rejected by the transport layer.
+    # Keep in sync with nginx client_max_body_size.
+    result.maxRequestBytes         = getLong("MAX_REQUEST_BYTES", 53_477_376)  # ~51 MB
     result.pastePreviewChars       = 8_192
     result.untitledTitleMaxChars   = 40
     result.inlinePasteMaxBytes     = getLong("INLINE_PASTE_MAX_BYTES", 262_144).int
@@ -75,3 +82,6 @@ proc loadConfig*(): AppConfig =
     result.port                    = getLong("PORT", 8080).int
     result.workerThreads           = getLong("WORKER_THREADS", 8).int
     result.networkLog              = getEnv("NETWORK_LOG", "true").toLowerAscii() != "false"
+    result.accessLogPath           = getEnv("ACCESS_LOG_PATH", "")
+    result.accessLogMaxBytes       = getLong("ACCESS_LOG_MAX_BYTES", 5_242_880)   # 5 MB
+    result.accessLogFlushMs        = getLong("ACCESS_LOG_FLUSH_MS", 5_000).int    # 5 s

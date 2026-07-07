@@ -51,7 +51,7 @@ IDs, `{"id"}`-only create responses). Edit the Nim tree to change runtime behavi
 structure under `pastebin-api/src/`:
 
 - `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults, incl. the 3-tier rate
-  limits and `uploads` policy. A few never-tuned limits (`maxRequestBytes` 1 GB, `pastePreviewChars`,
+  limits and `uploads` policy. A couple of never-tuned limits (`pastePreviewChars`,
   `untitledTitleMaxChars`) are fixed constants, not env vars.
 - **`endpoints/routes.nim` — the route map** (verb → path → handler). Start here to find any
   endpoint. One handler per file under `endpoints/{pastes,files,admin}/`: createPaste,
@@ -157,10 +157,30 @@ The stack recovers on its own after a reboot — no manual `task deploy` needed 
 Box: Pi 3B, Debian 12 (bookworm), kernel 6.12 aarch64, 906 MB RAM / 512 MB swap, Docker 28.4.0 /
 Compose v2.39.2, OpenMediaVault 7. OMV's web UI was moved off :80 → **:9000** so nginx can own :80.
 
+## Access log
+
+The API writes one plaintext line per request — `timestamp ip method path` — via `accesslog.nim`, an
+app-level middleware registered as the **outermost** global layer (before `rateLimit` in `routes.nim`),
+so it records every access including shed (503) and 404 responses. Enabled by `ACCESS_LOG_PATH`
+(`""` = disabled); both compose files set it to `/data/logs/access.log`, backed by the `log-data`
+volume (local) or the `${LOG_HOST_PATH}` btrfs bind-mount (prod, `.../pastebin/logs`). Lines are
+buffered in memory and flushed by a background thread every `ACCESS_LOG_FLUSH_MS` (5 s) rather than
+per-request, so a hard crash can lose the last few seconds of lines. It rotates by
+size (`ACCESS_LOG_MAX_BYTES`, 5 MB) with **ever-increasing** numbers — the active file is
+`access.log`, retired files are `access.log.1`, `access.log.2`, … (newest = highest); existing files
+are never renamed. **Retention is an external cron on the Pi** — the app never deletes. Add a daily job:
+```
+find /srv/dev-disk-by-uuid-<data-uuid>/pastebin/logs -name 'access.log.*' -mtime +14 -delete
+```
+Only rotated files match `access.log.*`; the active file is untouched.
+
 ## Gotchas
 
 - SQLite uses WAL → the data dir must be a real POSIX filesystem (not FAT32/exFAT).
-- nginx `client_max_body_size` and the API's `MAX_REQUEST_BYTES` must stay in sync (1 GB default).
+- nginx `client_max_body_size` and the API's `MAX_REQUEST_BYTES` must stay in sync (~51 MB default:
+  the 50 MB `MAX_FILE_UPLOAD_BYTES` file limit plus multipart-envelope headroom). Both reject an
+  oversize upload on `Content-Length` *before* the body is streamed/spilled — the guard that keeps a
+  big upload from thrashing the Pi's SD-card-backed temp/swap and wedging the box.
 - CORS: the API sets no `Access-Control-*` headers — the SPA is same-origin (relative `/api` base),
   so cross-origin browser access is blocked by default. (The old wildcard `AllowAll` in nginx, a
   leftover from the deleted .NET backend, has been removed.)

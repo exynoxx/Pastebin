@@ -3,7 +3,7 @@
 ## owns the HTTP server + per-request glue. Listens on port 8080 behind nginx.
 
 import std/strformat
-import config, db, blobstore, ratelimit, ntfy, clientip
+import config, db, blobstore, ratelimit, ntfy, clientip, accesslog
 import webframework/server
 import endpoints/routes, endpoints/admin/guard
 
@@ -14,6 +14,7 @@ proc main() =
     initBlobStore(cfg.blobStoragePath)
     initAdminGuard()
     initRateLimiter(cfg)
+    initAccessLog(cfg)
     initNtfy(cfg)
 
     stdout.writeLine(&"pastebin-api (nim) listening on 0.0.0.0:{cfg.port}" &

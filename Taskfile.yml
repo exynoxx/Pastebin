@@ -143,9 +143,9 @@ tasks:
           else
             echo "!! set PI_DATA_DIR or DATA_UUID in .taskenv"; exit 1
           fi
-          echo "==> Ensuring data + deploy dirs on the Pi (blobs/db owned by app uid 1654)"
-          {{.SSH}} {{.PI_HOST}} "sudo mkdir -p '$BASE/blobs' '$BASE/db' && \
-            sudo chown 1654:1654 '$BASE/blobs' '$BASE/db' && \
+          echo "==> Ensuring data + deploy dirs on the Pi (blobs/db/logs owned by app uid 1654)"
+          {{.SSH}} {{.PI_HOST}} "sudo mkdir -p '$BASE/blobs' '$BASE/db' '$BASE/logs' && \
+            sudo chown 1654:1654 '$BASE/blobs' '$BASE/db' '$BASE/logs' && \
             mkdir -p '$BASE/deploy'"
           echo "==> Syncing compose + .env to {{.PI_HOST}}:$BASE/deploy"
           {{.SCP}} docker-compose.rpi.yaml .env {{.PI_HOST}}:"$BASE/deploy/"
@@ -153,9 +153,11 @@ tasks:
           {{.SSH}} {{.PI_HOST}} "cd '$BASE/deploy' && \
             BLOB_HOST_PATH='$BASE/blobs' \
             DB_HOST_PATH='$BASE/db' \
+            LOG_HOST_PATH='$BASE/logs' \
             docker compose -f docker-compose.rpi.yaml pull && \
             BLOB_HOST_PATH='$BASE/blobs' \
             DB_HOST_PATH='$BASE/db' \
+            LOG_HOST_PATH='$BASE/logs' \
             docker compose -f docker-compose.rpi.yaml up -d"
           echo "==> Deployed. Check: task ps"
 

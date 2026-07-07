@@ -7,7 +7,7 @@
 
 import webframework/server
 import webframework/context as fctx
-import ../config, ../ratelimit
+import ../config, ../ratelimit, ../accesslog
 
 # Re-export what handlers reach for through this module — httpserver (Request + response helpers),
 # config (AppConfig), and the framework's Ctx-level helpers. NOT the framework's generic `Ctx`: the
@@ -29,7 +29,8 @@ import
     admin/listPastes, admin/deletePaste
 
 proc registerRoutes*(): RouteTable[AppConfig] =
-    result.use(rateLimit()) 
+    result.use(accessLog())   # outermost: records every access, even those rate-limited (503) or 404
+    result.use(rateLimit())
     result.get(   "/api/pastes",                       handleRecentPastes)
     result.post(  "/api/pastes",                       handleCreatePaste)
     result.get(   "/api/pastes/{id}",                  handleGetPaste)

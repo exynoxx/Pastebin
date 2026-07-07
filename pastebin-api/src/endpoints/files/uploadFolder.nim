@@ -5,7 +5,7 @@
 ## container memory cap. Single-file uploads (the common path) stream and aren't affected.
 
 import std/[strutils, tables, strformat]
-import ../context, ../../json
+import ../routes, ../../json
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../ids, webframework/multipart
 import zippy/ziparchives

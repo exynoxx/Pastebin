@@ -9,7 +9,8 @@ bin         = @["main"]
 
 # Dependencies
 #
-# The HTTP layer is our own small framework (src/webframework/, server on std/net) — no web framework.
+# The HTTP layer is our own small framework (../webframework/ at the repo root, reached via
+# --path:".." in nim.cfg; server on std/net) — no external web framework.
 requires "nim >= 2.0.0"
 requires "db_connector >= 0.1.0" # maintained successor to std/db_sqlite
 requires "zippy >= 0.10.11"      # folder -> zip archiving

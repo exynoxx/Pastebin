@@ -3,8 +3,8 @@
 ##
 ## Two policies, two entry points, kept distinct because they enforce different things:
 ##
-## 1. `tryAcquire` — runs on EVERY request (via the `rateLimit` middleware below, composed in
-##    endpoints/dispatch.nim). Three chained limiters apply, in order:
+## 1. `tryAcquire` — runs on EVERY request (via the `rateLimit` middleware below, registered as the
+##    global middleware in endpoints/routes.nim). Three chained limiters apply, in order:
 ##      a. per-IP sliding window   (perIpPerMinute,  1 min, 6 segments)
 ##      b. global sliding window   (globalPerMinute, 1 min, 6 segments)
 ##      c. global concurrency cap  (globalConcurrency, no queue)
@@ -28,7 +28,7 @@
 ## that answers 503) and `rejectPasteLimit` (the paste 429). Keeping the decision logic and its
 ## HTTP presentation together is why this module depends on the framework.
 
-import std/[tables, deques, locks, times, json]
+import std/[tables, deques, locks, times, json, strutils]
 import config
 import webframework/[httpserver, context, middleware]
 
@@ -221,13 +221,20 @@ proc checkPasteCreate*(ip: string): Decision =
 
 const BusyBody = errorJson("Server busy or rate limit exceeded. Please retry shortly.")
 
-proc rateLimit*(isUpload: bool): Middleware[AppConfig] =
+const UploadPathPrefix = "/api/files/upload"
+    ## The upload routes (`/api/files/upload`, `/api/files/upload-folder`) share this prefix; nothing
+    ## else does (create-paste-from-file is `/api/files/create-paste-from-file`). Since the framework
+    ## applies one global middleware chain to every request, the upload distinction is drawn here from
+    ## the path rather than a per-route flag.
+
+proc rateLimit*(): Middleware[AppConfig] =
     ## Request middleware: acquire on the way in — 503 + Retry-After if any tier rejects — and
-    ## release the concurrency slot on the way out. `isUpload` selects the stricter per-IP uploads
-    ## policy. Composed as the outermost middleware (dispatch.nim), so it also covers 404s. Each
-    ## call returns a fresh per-request closure that captures the matched route's upload flag.
+    ## release the concurrency slot on the way out. Registered as the outermost global middleware
+    ## (routes.nim), so it also covers 404s. Upload routes get the stricter per-IP uploads policy,
+    ## detected from the request path.
     result = proc(ctx: Ctx[AppConfig], next: Next) {.gcsafe.} =
         {.cast(gcsafe).}:
+            let isUpload = ctx.path.startsWith(UploadPathPrefix)
             let acq = tryAcquire(ctx.ip, isUpload)
             if not acq.allowed:
                 ctx.req.respond(503, BusyBody, extraHeaders = [("Retry-After", "10")])

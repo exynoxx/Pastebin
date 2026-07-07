@@ -1,7 +1,7 @@
 ## GET /api/files/{id}/raw — view the file inline (X-Content-Type-Options: nosniff).
 
 import std/options
-import ../context
+import ../routes
 import ../../types
 import downloadFile
 

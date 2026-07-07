@@ -3,7 +3,7 @@
 ## `resolveDownload` (the blob lookup shared with the inline-view slice) is exported here.
 
 import std/[options, strutils]
-import ../context
+import ../routes
 import ../../types, ../../db, ../../blobstore
 
 func contentDispositionAttachment*(name: string): string =

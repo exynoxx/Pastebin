@@ -5,7 +5,7 @@
 ## (its canonical home) rather than living in a separate service layer.
 
 import std/[json, strutils, unicode, strformat]
-import ../context
+import ../routes
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids
 

@@ -19,7 +19,7 @@
 ## ratelimit.rejectPasteLimit — rather than wrapping the request in the middleware chain.
 
 import std/[tables, locks, times]
-import ../context
+import ../routes
 
 const
     BaseCooldownSec* = 2        ## first failed attempt locks the IP for this long

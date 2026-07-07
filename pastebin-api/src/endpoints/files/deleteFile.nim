@@ -1,7 +1,7 @@
 ## DELETE /api/files/{id} — delete a file and its backing blob.
 
 import std/[json, options]
-import ../context, ../admin/guard
+import ../routes, ../admin/guard
 import ../../types, ../../db, ../../blobstore
 
 proc handleDeleteFile*(ctx: Ctx, id: string) =

@@ -3,9 +3,9 @@
 ## owns the HTTP server + per-request glue. Listens on port 8080 behind nginx.
 
 import std/strformat
-import config, db, blobstore, ratelimit, ntfy
+import config, db, blobstore, ratelimit, ntfy, clientip
 import webframework/server
-import endpoints/dispatch, endpoints/routes, endpoints/admin/guard
+import endpoints/routes, endpoints/admin/guard
 
 proc main() =
     let cfg = loadConfig()
@@ -15,20 +15,19 @@ proc main() =
     initAdminGuard()
     initRateLimiter(cfg)
     initNtfy(cfg)
-    initRoutes(registerRoutes(), cfg)
 
     stdout.writeLine(&"pastebin-api (nim) listening on 0.0.0.0:{cfg.port}" &
         &"  db={cfg.sqlitePath}  blobs={cfg.blobStoragePath}" &
         &"  workers={cfg.workerThreads}")
     stdout.flushFile()
 
-    serve(
-        port = cfg.port,
-        numThreads = cfg.workerThreads,
-        bodySpillThreshold = cfg.inlinePasteMaxBytes,
-        maxBodyBytes = cfg.maxRequestBytes,
-        networkLog = cfg.networkLog,
-        dispatch = handle)
+    let serverCfg = ServerConfig(
+        port: cfg.port,
+        numThreads: cfg.workerThreads,
+        bodySpillThreshold: cfg.inlinePasteMaxBytes,
+        maxBodyBytes: cfg.maxRequestBytes,
+        networkLog: cfg.networkLog)
+    run(registerRoutes(), cfg, serverCfg, resolveIp = resolveClientIp)
 
 when isMainModule:
     main()

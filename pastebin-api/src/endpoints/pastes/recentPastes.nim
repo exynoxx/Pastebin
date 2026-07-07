@@ -1,7 +1,7 @@
 ## GET /api/pastes — the most recent public pastes/files (default 10, ?limit=N).
 
 import std/[json, strutils]
-import ../context
+import ../routes
 import ../../types, ../../db, ../../json
 
 serialize(PasteSummary)

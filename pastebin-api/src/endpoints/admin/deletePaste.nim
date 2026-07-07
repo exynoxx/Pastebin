@@ -1,7 +1,7 @@
 ## DELETE /api/admin/pastes/{id} — admin delete a paste and its backing blob (if any).
 
 import std/[json, options]
-import ../context, guard
+import ../routes, guard
 import ../../types, ../../db, ../../blobstore
 
 proc handleAdminDeletePaste*(ctx: Ctx, id: string) =

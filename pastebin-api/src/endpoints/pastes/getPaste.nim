@@ -1,7 +1,7 @@
 ## GET /api/pastes/{id} — one paste's metadata + (inline) content.
 
 import std/[json, options]
-import ../context
+import ../routes
 import ../../types, ../../db, ../../json
 
 serialize(Paste, omit = [blobId])

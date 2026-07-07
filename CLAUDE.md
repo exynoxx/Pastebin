@@ -70,10 +70,16 @@ structure under `pastebin-api/src/`:
   client-supplied XFF, so the leftmost hop isn't spoofable via the public path), then nginx appends
   the docker-bridge gateway → `"<client>, 172.18.0.1"`. `X-Real-IP` is nginx's `$remote_addr` (that
   constant gateway), a fallback only — preferring it (an old bug) collapsed every user into one bucket.
-- `webframework/` — hand-rolled HTTP stack, no framework dep: `httpserver.nim` (`std/net`; streams
-  bodies over the spill threshold to a temp file; Range support), `router.nim`, `multipart.nim`
-  (custom parser), `dispatcher.nim`, `middleware.nim`, `context.nim`, `server.nim`. Optional
-  per-request `NETLOG` stdout line for IP-chain debugging (disable with `NETWORK_LOG=false`).
+- **`../webframework/`** — hand-rolled HTTP stack, no framework dep. **Extracted out of this tree to
+  the repo root** so it can be reused; the API reaches it via `--path:".."` in `nim.cfg` and imports
+  it package-style (`import webframework/…`). Generic over an app state type `E` (the API binds
+  `E = AppConfig`): `httpserver.nim` (`std/net`; streams bodies over the spill threshold to a temp
+  file; Range support), `router.nim` (literal + `{param}`, allocation-free path matching), `context.nim`
+  (`Ctx[E]` + response/handler helpers), `middleware.nim` (onion chain), `dispatcher.nim` (per-request
+  glue), `routetable.nim` (`RouteTable[E]` registration facade), `server.nim` (`run`/`serve` entry),
+  `multipart.nim` (custom parser), plus `macros.nim`/`tmpfile.nim`. Optional per-request `NETLOG`
+  stdout line for IP-chain debugging (disable with `NETWORK_LOG=false`). Rate limiting is deliberately
+  **not** in the framework — it's an app-level `Middleware[AppConfig]` (see `ratelimit.nim`).
 - `pastebin.nimble` — deps: `db_connector`, `zippy` (folder→zip); needs `nim >= 2.0`.
 
 Local dev (no Docker; `nim` is on PATH at `~/.nimble/bin/nim`):

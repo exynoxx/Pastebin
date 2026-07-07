@@ -1,7 +1,7 @@
 ## GET /api/pastes/{id}/raw — full raw content: a streamed blob (Range-capable) or inline text.
 
 import std/options
-import ../context
+import ../routes
 import ../../types, ../../db, ../../blobstore
 
 proc handleRawPaste*(ctx: Ctx, id: string) =

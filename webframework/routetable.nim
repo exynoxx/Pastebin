@@ -29,6 +29,31 @@ proc put*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
 proc patch*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
     t.router.add("PATCH", path, handler)
 
+# ---- param-binding overloads ------------------------------------------------
+# Deliver a route's `{param}` captures as explicit args after `ctx`, so a handler for `/…/{id}` can
+# take `(ctx: Ctx[E], id: string)` instead of reaching into `ctx.params`. These must be templates,
+# not procs: each expands around the concrete handler symbol at the call site, so the generated
+# `proc(ctx)` wrapper references a global (no closure capture) and stays a plain nimcall handler the
+# route table can store. Args bind in pattern order.
+
+template get*[E](t: var RouteTable[E], path: string, handler: proc(ctx: Ctx[E], param1: string) {.nimcall.}) =
+    t.get(path, proc(ctx: Ctx[E]) {.nimcall.} = handler(ctx, ctx.params[0]))
+
+template get*[E](t: var RouteTable[E], path: string, handler: proc(ctx: Ctx[E], param1, param2: string) {.nimcall.}) =
+    t.get(path, proc(ctx: Ctx[E]) {.nimcall.} = handler(ctx, ctx.params[0], ctx.params[1]))
+
+template post*[E](t: var RouteTable[E], path: string, handler: proc(ctx: Ctx[E], param1: string) {.nimcall.}) =
+    t.post(path, proc(ctx: Ctx[E]) {.nimcall.} = handler(ctx, ctx.params[0]))
+
+template post*[E](t: var RouteTable[E], path: string, handler: proc(ctx: Ctx[E], param1, param2: string) {.nimcall.}) =
+    t.post(path, proc(ctx: Ctx[E]) {.nimcall.} = handler(ctx, ctx.params[0], ctx.params[1]))
+
+template delete*[E](t: var RouteTable[E], path: string, handler: proc(ctx: Ctx[E], param1: string) {.nimcall.}) =
+    t.delete(path, proc(ctx: Ctx[E]) {.nimcall.} = handler(ctx, ctx.params[0]))
+
+template delete*[E](t: var RouteTable[E], path: string, handler: proc(ctx: Ctx[E], param1, param2: string) {.nimcall.}) =
+    t.delete(path, proc(ctx: Ctx[E]) {.nimcall.} = handler(ctx, ctx.params[0], ctx.params[1]))
+
 # ---- global middleware + 404 ------------------------------------------------
 
 proc use*[E](t: var RouteTable[E], m: Middleware[E]) =

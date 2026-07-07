@@ -2,7 +2,7 @@
 ## Reuses the paste-creation pipeline that lives in the create-paste slice.
 
 import std/[json, strutils, options]
-import ../context
+import ../routes
 import ../../types, ../../db, ../../apperrors, ../../ratelimit, ../../timeutil
 import ../pastes/createPaste
 

@@ -1,7 +1,7 @@
 ## GET /api/admin/pastes — every paste regardless of visibility, newest first (admin only).
 
 import std/json
-import ../context, guard
+import ../routes, guard
 import ../../types, ../../db, ../../json
 
 serialize(AdminPasteRow)

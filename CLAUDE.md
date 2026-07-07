@@ -76,7 +76,7 @@ structure under `pastebin-api/src/`:
   `E = AppConfig`): `httpserver.nim` (`std/net`; streams bodies over the spill threshold to a temp
   file; Range support), `router.nim` (literal + `{param}`, allocation-free path matching), `context.nim`
   (`Ctx[E]` + response/handler helpers), `middleware.nim` (onion chain), `dispatcher.nim` (per-request
-  glue), `routetable.nim` (`RouteTable[E]` registration facade), `server.nim` (`run`/`serve` entry),
+  glue), `routetable.nim` (`RouteTable[E]` registration facade), `server.nim` (`serve` entry),
   `multipart.nim` (custom parser), plus `macros.nim`/`tmpfile.nim`. Optional per-request `NETLOG`
   stdout line for IP-chain debugging (disable with `NETWORK_LOG=false`). Rate limiting is deliberately
   **not** in the framework — it's an app-level `Middleware[AppConfig]` (see `ratelimit.nim`).

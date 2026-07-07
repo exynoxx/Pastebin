@@ -1,33 +1,10 @@
-## Umbrella + entry point. Re-exports the whole framework and defines the two ways to serve:
-## `run` (build a `RouteTable[E]` and hand it the app state — the usual path) and the lower-level
-## `serve` it's built on (raw per-request `dispatch`, plus the optional access log).
+## Umbrella + entry point. Re-exports the whole framework and defines the public API: `serve` —
+## build a `RouteTable[E]`, hand it the app state, and serve (blocking). Everything it's built on
+## (raw per-request dispatch, the optional access log) is private below.
 
 import std/strutils
 import httpserver, context, router, middleware, dispatcher, routetable
 export httpserver, context, router, middleware, dispatcher, routetable
-
-# ---- low-level entry: raw dispatch -----------------------------------------
-
-var
-    gDispatch: RequestHandler   ## set once in serve(), read on the workers
-    gNetworkLog: bool
-
-proc entry(req: Request) {.nimcall, gcsafe.} =
-    {.cast(gcsafe).}:
-        if gNetworkLog:
-            stdout.writeLine("NETLOG " & req.httpMethod & " " & req.path)
-            stdout.flushFile()
-        gDispatch(req)
-
-proc serve*(port, numThreads, bodySpillThreshold: int, maxBodyBytes: int64,
-            networkLog: bool, dispatch: RequestHandler) =
-    ## Wire a raw `dispatch` onto the HTTP server and serve (blocking). Set once, before any worker
-    ## starts — the single-writer discipline listenAndServe() relies on.
-    gDispatch = dispatch
-    gNetworkLog = networkLog
-    listenAndServe(port, numThreads, bodySpillThreshold, maxBodyBytes, entry)
-
-# ---- high-level entry: RouteTable ------------------------------------------
 
 type
     ServerConfig* = object
@@ -39,6 +16,18 @@ type
 
     ResolveIp* = proc(req: Request): string {.gcsafe.}
         ## Resolves the client id used for `Ctx.ip` (rate-limit / quota / owner bucket).
+
+var
+    gDispatch: RequestHandler   ## set once in serveRaw(), read on the workers
+    gNetworkLog: bool
+
+# Bodies live at the bottom so the public API reads first; Nim needs them declared before use.
+proc serveRaw(port, numThreads, bodySpillThreshold: int, maxBodyBytes: int64,
+              networkLog: bool, dispatch: RequestHandler)
+proc entry(req: Request) {.nimcall, gcsafe.}
+proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.}
+
+# ---- public API ------------------------------------------------------------
 
 proc defaultConfig*(): ServerConfig =
     ServerConfig(port: 8080, numThreads: 4, bodySpillThreshold: 1 shl 20,
@@ -52,11 +41,8 @@ proc defaultResolveIp*(req: Request): string {.gcsafe.} =
         return (if comma >= 0: xff[0 ..< comma] else: xff).strip()
     req.remoteAddress
 
-proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.} =
-    ctx.respondError(404, "Not found")
-
-proc run*[E](routes: RouteTable[E], state: E, config = defaultConfig(),
-             resolveIp: ResolveIp = defaultResolveIp) =
+proc serve*[E](routes: RouteTable[E], state: E, config = defaultConfig(),
+               resolveIp: ResolveIp = defaultResolveIp) =
     ## Serve `routes` (blocking). `state` is the app structure every handler gets via `Ctx.cfg`.
     ## Captured once into a per-instantiation global closure before workers start, so the nimcall
     ## `onRequest` (which can't close over locals) reaches it and the single-writer rule holds.
@@ -76,5 +62,26 @@ proc run*[E](routes: RouteTable[E], state: E, config = defaultConfig(),
     proc onRequest(req: Request) {.nimcall, gcsafe.} =
         {.cast(gcsafe).}: gRun(req)
 
-    serve(config.port, config.numThreads, config.bodySpillThreshold,
-          config.maxBodyBytes, config.networkLog, onRequest)
+    serveRaw(config.port, config.numThreads, config.bodySpillThreshold,
+             config.maxBodyBytes, config.networkLog, onRequest)
+
+# ---- private helpers -------------------------------------------------------
+
+proc serveRaw(port, numThreads, bodySpillThreshold: int, maxBodyBytes: int64,
+              networkLog: bool, dispatch: RequestHandler) =
+    ## Wire a raw `dispatch` onto the HTTP server and serve (blocking). Set once, before any worker
+    ## starts — the single-writer discipline listenAndServe() relies on.
+    gDispatch = dispatch
+    gNetworkLog = networkLog
+    listenAndServe(port, numThreads, bodySpillThreshold, maxBodyBytes, entry)
+
+proc entry(req: Request) {.nimcall, gcsafe.} =
+    ## The `RequestHandler` wired into the HTTP server: optional access log, then the app's dispatch.
+    {.cast(gcsafe).}:
+        if gNetworkLog:
+            stdout.writeLine("NETLOG " & req.httpMethod & " " & req.path)
+            stdout.flushFile()
+        gDispatch(req)
+
+proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.} =
+    ctx.respondError(404, "Not found")

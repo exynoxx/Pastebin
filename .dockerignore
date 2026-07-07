@@ -1,0 +1,7 @@
+# Build context is the repo root (API + nginx images). Keep it lean: the frontend build runs
+# `npm ci` inside the image, and nothing in either build needs VCS/editor/local artifacts.
+.git
+**/node_modules
+pastebin-frontend/build
+**/*.log
+.taskenv

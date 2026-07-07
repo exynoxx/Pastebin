@@ -9,7 +9,10 @@
 # proper PT_INTERP and dlopen works. Nothing but libc is needed at link time; the arm64 shared
 # libs come from the (glibc) runtime stage below.
 #
-#   docker buildx build --platform linux/arm64 -f pastebin-api/Dockerfile pastebin-api
+# Build context is the REPO ROOT (not pastebin-api/), because the HTTP framework the API imports
+# lives at ../webframework and must be copied into the image alongside the API source.
+#
+#   docker buildx build --platform linux/arm64 -f pastebin-api/Dockerfile .
 
 ARG ZIG_VERSION=0.13.0
 # Pin the target glibc low enough to run on the runtime image's glibc (bookworm = 2.36).
@@ -28,10 +31,12 @@ RUN apk add --no-cache curl xz && \
     ln -s "/opt/zig-linux-x86_64-${ZIG_VERSION}/zig" /usr/local/bin/zig
 
 # Dependencies first, so this layer caches across source-only changes.
-COPY pastebin.nimble nim.cfg ./
+COPY pastebin-api/pastebin.nimble pastebin-api/nim.cfg ./
 RUN nimble install -dy
 
-COPY src ./src
+# The framework at /webframework satisfies nim.cfg's `--path:".."` (relative to this WORKDIR).
+COPY webframework /webframework
+COPY pastebin-api/src ./src
 
 # Map Docker's TARGETARCH -> (zig glibc target triple, nim cpu), wrap zig as a clang-compatible
 # cc/linker, and cross-compile. -d:release + the nim.cfg flags (orc, useMalloc, threads, ssl).

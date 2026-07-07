@@ -13,4 +13,4 @@ proc registerRoutes(): RouteTable[AppState] =
 
 when isMainModule:
     let state = AppState(greeting: "hello world")
-    run(registerRoutes(), state)
+    serve(registerRoutes(), state)

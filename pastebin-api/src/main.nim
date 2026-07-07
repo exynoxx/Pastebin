@@ -27,7 +27,7 @@ proc main() =
         bodySpillThreshold: cfg.inlinePasteMaxBytes,
         maxBodyBytes: cfg.maxRequestBytes,
         networkLog: cfg.networkLog)
-    run(registerRoutes(), cfg, serverCfg, resolveIp = resolveClientIp)
+    serve(registerRoutes(), cfg, serverCfg, resolveIp = resolveClientIp)
 
 when isMainModule:
     main()

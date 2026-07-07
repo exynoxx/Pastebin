@@ -50,14 +50,12 @@ proc serve*[E](routes: RouteTable[E], state: E, config = defaultConfig(),
 
     let notFound = if routes.notFound != nil: routes.notFound else: defaultNotFound[E]
 
+    # Built ONCE here, then called (not rebuilt) per request — the router, state, notFound handler
+    # and global chain are all fixed after startup, so nothing per-request needs capturing. The
+    # dispatcher is handed these values directly rather than via per-request callback closures.
     gRun = proc(req: Request) {.gcsafe.} =
         {.cast(gcsafe).}:
-            dispatchRequest(
-                routes.router, state, req, resolveIp,
-                proc(found: bool, payload: Handler[E]): Handler[E] {.gcsafe.} =
-                    (if found: payload else: notFound),
-                proc(found: bool, payload: Handler[E]): seq[Middleware[E]] {.gcsafe.} =
-                    routes.global)
+            dispatchRequest(routes.router, state, req, resolveIp, notFound, routes.global)
 
     proc onRequest(req: Request) {.nimcall, gcsafe.} =
         {.cast(gcsafe).}: gRun(req)

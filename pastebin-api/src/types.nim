@@ -12,17 +12,19 @@ type
         visibility*: string    ## "public" | "private"
         blobId*: string        ## internal: "" when inline. Never emitted in JSON.
 
-    # Admin listing row: every paste regardless of visibility, plus owner_ip and
+    # Admin listing row: every paste AND file regardless of visibility, plus owner_ip and
     # a blob-backed flag. Only used by GET /api/admin/pastes (see endpoints/admin/listPastes).
-    AdminPasteRow* = object
+    AdminContentRow* = object
         id*: string
-        title*: string
+        kind*: string          ## "paste" | "file"
+        title*: string         ## paste title, or the file's original name
+        contentType*: string   ## MIME for files; "" for pastes
         size*: int64
-        isTruncated*: bool
+        isTruncated*: bool     ## pastes only; always false for files
         hasBlob*: bool         ## blob_id != '' => stored on disk vs inline
         createdAt*: int64      ## Unix epoch milliseconds, UTC
         visibility*: string    ## "public" | "private"
-        ownerIp*: string       ## the IP that created the paste
+        ownerIp*: string       ## the IP that created the item
 
     PasteSummary* = object
         id*: string

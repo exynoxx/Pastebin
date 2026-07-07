@@ -154,21 +154,27 @@ proc selectRecentSummaries*(limit: int): seq[PasteSummary] =
             createdAt: int64OrZero(r[3]), kind: r[4],
             contentType: r[5])  # "" (NULL) for pastes
 
-proc selectAllPastes*(): seq[AdminPasteRow] =
-    ## Admin view: every paste (no visibility filter), newest first, including owner_ip.
+proc selectAllContent*(): seq[AdminContentRow] =
+    ## Admin view: every paste AND file (no visibility filter), newest first, including owner_ip.
     let rows = conn().getAllRows(sql"""
-        SELECT id, title, size, is_truncated, created_at, blob_id, visibility, owner_ip
-        FROM pastes ORDER BY created_at DESC;
+        SELECT id, 'paste' AS kind, title AS name, '' AS content_type, size, is_truncated,
+               blob_id, created_at, visibility, owner_ip
+        FROM pastes
+        UNION ALL
+        SELECT id, 'file' AS kind, original_name AS name, content_type, size, 0 AS is_truncated,
+               blob_id, uploaded_at AS created_at, visibility, owner_ip
+        FROM files
+        ORDER BY created_at DESC;
     """)
     for r in rows:
-        result.add AdminPasteRow(
-            id: r[0], title: r[1],
-            size: int64OrZero(r[2]),
-            isTruncated: int64OrZero(r[3]) != 0,
-            createdAt: int64OrZero(r[4]),
-            hasBlob: r[5].len > 0,   # blob_id NULL/"" => inline
-            visibility: r[6],
-            ownerIp: r[7])
+        result.add AdminContentRow(
+            id: r[0], kind: r[1], title: r[2], contentType: r[3],
+            size: int64OrZero(r[4]),
+            isTruncated: int64OrZero(r[5]) != 0,
+            hasBlob: r[6].len > 0,   # blob_id NULL/"" => inline
+            createdAt: int64OrZero(r[7]),
+            visibility: r[8],
+            ownerIp: r[9])
 
 proc deletePasteRow*(id: string): bool =
     ## Delete a paste's row; true when a row was actually removed.

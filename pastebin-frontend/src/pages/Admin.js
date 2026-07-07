@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../conf';
 import { Loading } from '../components/Loading';
-import { formatBytes } from '../utils/format';
+import { formatBytes, timeAgo, sizeColor } from '../utils/format';
+
+// Admin-gated delete endpoints differ by kind: pastes under /admin, files under /files.
+const deleteUrl = (p) => (p.kind === 'file' ? `/files/${p.id}` : `/admin/pastes/${p.id}`);
 
 // Unlisted admin page (no nav link points here). Protected by a shared-secret token
 // the backend checks as the X-Admin-Token header. The token is prompted for on load
@@ -54,25 +57,25 @@ export function Admin() {
     loadPastes();
   }, [loadPastes]);
 
-  const deletePaste = async (id, title) => {
-    if (!window.confirm(`Delete paste "${title}"? This cannot be undone.`)) return;
+  const deletePaste = async (p) => {
+    if (!window.confirm(`Delete ${p.kind} "${p.title}"? This cannot be undone.`)) return;
     try {
-      await axios.delete(`/admin/pastes/${id}`, { headers: authHeader() });
-      setPastes((prev) => prev.filter((p) => p.id !== id));
+      await axios.delete(deleteUrl(p), { headers: authHeader() });
+      setPastes((prev) => prev.filter((x) => x.id !== p.id));
     } catch (err) {
-      alert(handleAuthError(err, 'Failed to delete paste'));
+      alert(handleAuthError(err, `Failed to delete ${p.kind}`));
     }
   };
 
-  // No bulk endpoint exists, so delete each paste from the IP one request at a time.
+  // No bulk endpoint exists, so delete each item from the IP one request at a time.
   // Only the ids that actually deleted are removed from the list; failures stay visible.
   const deletePastesByIp = async (ip, group) => {
-    if (!window.confirm(`Delete all ${group.length} paste(s) from ${ip}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete all ${group.length} item(s) from ${ip}? This cannot be undone.`)) return;
     const deleted = new Set();
     let failure = null;
     for (const p of group) {
       try {
-        await axios.delete(`/admin/pastes/${p.id}`, { headers: authHeader() });
+        await axios.delete(deleteUrl(p), { headers: authHeader() });
         deleted.add(p.id);
       } catch (err) {
         failure = err;
@@ -81,14 +84,14 @@ export function Admin() {
     if (deleted.size > 0) {
       setPastes((prev) => prev.filter((p) => !deleted.has(p.id)));
     }
-    if (failure) alert(handleAuthError(failure, 'Failed to delete some pastes'));
+    if (failure) alert(handleAuthError(failure, 'Failed to delete some items'));
   };
 
   if (loading) {
-    return <Loading text="Loading pastes..." />;
+    return <Loading text="Loading content..." />;
   }
 
-  // Group pastes by creator IP, noisiest IP first. Empty IPs bucket under "unknown".
+  // Group items by creator IP, noisiest IP first. Empty IPs bucket under "unknown".
   const groups = groupByIp
     ? Object.entries(
         pastes.reduce((acc, p) => {
@@ -104,8 +107,8 @@ export function Admin() {
       <div className="card">
         <div className="paste-header">
           <div>
-            <h2>Admin — All Pastes</h2>
-            <div className="paste-meta">{pastes.length} paste(s)</div>
+            <h2>Admin — All Content</h2>
+            <div className="paste-meta">{pastes.length} item(s)</div>
           </div>
           <div className="paste-actions">
             <button className="btn btn-secondary" onClick={() => navigate('/')}>
@@ -133,7 +136,7 @@ export function Admin() {
 
         {error && <div className="alert alert-error">{error}</div>}
         {!error && pastes.length === 0 && (
-          <div className="alert alert-info">No pastes yet.</div>
+          <div className="alert alert-info">No content yet.</div>
         )}
 
         {groupByIp ? (
@@ -143,7 +146,7 @@ export function Admin() {
               <div key={ip} className="ip-group" style={{ marginTop: 24 }}>
                 <div className="paste-header">
                   <div className="paste-meta">
-                    {`IP ${ip} · ${group.length} paste(s) · ${formatBytes(totalSize)}`}
+                    {`IP ${ip} · ${group.length} item(s) · ${formatBytes(totalSize)}`}
                   </div>
                   <div className="paste-actions">
                     <button
@@ -165,11 +168,13 @@ export function Admin() {
     </div>
   );
 
-  // Renders one paste list item; shared by the flat and grouped-by-IP views.
+  // Renders one content item (paste or file); shared by the flat and grouped-by-IP views.
   function renderPasteItem(p) {
-    const viewUrl = `/paste/${p.id}`;
+    // Files open at their own route; pastes (inline or blob-backed) at the paste view.
+    const viewUrl = p.kind === 'file' ? `/files/${p.id}` : `/paste/${p.id}`;
+    const isPublic = p.visibility === 'public';
     // Plain click = View (SPA nav). Ctrl/Cmd/Shift/middle click falls through to the
-    // browser's default anchor behaviour, opening the paste in a new tab.
+    // browser's default anchor behaviour, opening the item in a new tab.
     const openView = (e) => {
       if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
       e.preventDefault();
@@ -183,11 +188,33 @@ export function Admin() {
             onClick={openView}
             style={{ display: 'block', flex: 1, color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
           >
-            <div className="paste-title">{p.title}</div>
+            <div className="paste-title">
+              <span className="badge" style={{ marginRight: 6, opacity: 0.7, fontSize: '0.85em' }}>
+                [{p.kind}]
+              </span>
+              {p.title}
+            </div>
             <div className="paste-meta">
               {new Date(p.createdAt).toLocaleString()}
-              {` · ${formatBytes(p.size)}`}
-              {` · ${p.visibility}`}
+              {` · ${timeAgo(p.createdAt)}`}
+              {' · '}
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: sizeColor(p.size),
+                  marginRight: 4,
+                  verticalAlign: 'middle',
+                }}
+              />
+              {formatBytes(p.size)}
+              {' · '}
+              <span style={{ color: isPublic ? '#2e7d32' : '#d32f2f', fontWeight: 600 }}>
+                {p.visibility}
+              </span>
+              {p.kind === 'file' && p.contentType ? ` · ${p.contentType}` : ''}
               {` · ${p.hasBlob ? 'blob' : 'text'}`}
               {` · IP ${p.ownerIp || 'unknown'}`}
             </div>
@@ -196,7 +223,7 @@ export function Admin() {
             <button className="btn btn-secondary" onClick={() => navigate(viewUrl)}>
               View
             </button>
-            <button className="btn btn-danger" onClick={() => deletePaste(p.id, p.title)}>
+            <button className="btn btn-danger" onClick={() => deletePaste(p)}>
               Delete
             </button>
           </div>

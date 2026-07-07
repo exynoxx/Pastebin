@@ -19,6 +19,7 @@ export function Admin() {
   const [pastes, setPastes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [groupByIp, setGroupByIp] = useState(false);
   const navigate = useNavigate();
 
   // Reads the stored token, prompting once if it's missing.
@@ -63,9 +64,40 @@ export function Admin() {
     }
   };
 
+  // No bulk endpoint exists, so delete each paste from the IP one request at a time.
+  // Only the ids that actually deleted are removed from the list; failures stay visible.
+  const deletePastesByIp = async (ip, group) => {
+    if (!window.confirm(`Delete all ${group.length} paste(s) from ${ip}? This cannot be undone.`)) return;
+    const deleted = new Set();
+    let failure = null;
+    for (const p of group) {
+      try {
+        await axios.delete(`/admin/pastes/${p.id}`, { headers: authHeader() });
+        deleted.add(p.id);
+      } catch (err) {
+        failure = err;
+      }
+    }
+    if (deleted.size > 0) {
+      setPastes((prev) => prev.filter((p) => !deleted.has(p.id)));
+    }
+    if (failure) alert(handleAuthError(failure, 'Failed to delete some pastes'));
+  };
+
   if (loading) {
     return <Loading text="Loading pastes..." />;
   }
+
+  // Group pastes by creator IP, noisiest IP first. Empty IPs bucket under "unknown".
+  const groups = groupByIp
+    ? Object.entries(
+        pastes.reduce((acc, p) => {
+          const ip = p.ownerIp || 'unknown';
+          (acc[ip] = acc[ip] || []).push(p);
+          return acc;
+        }, {})
+      ).sort((a, b) => b[1].length - a[1].length)
+    : [];
 
   return (
     <div className="paste-view">
@@ -82,6 +114,20 @@ export function Admin() {
             <button className="btn btn-secondary" onClick={loadPastes}>
               Refresh
             </button>
+            <button
+              className="btn btn-secondary"
+              disabled={!groupByIp}
+              onClick={() => setGroupByIp(false)}
+            >
+              Flat
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={groupByIp}
+              onClick={() => setGroupByIp(true)}
+            >
+              By IP
+            </button>
           </div>
         </div>
 
@@ -90,53 +136,72 @@ export function Admin() {
           <div className="alert alert-info">No pastes yet.</div>
         )}
 
-        <ul className="recent-pastes">
-          {pastes.map((p) => {
-            const viewUrl = `/paste/${p.id}`;
-            // Plain click = View (SPA nav). Ctrl/Cmd/Shift/middle click falls through to the
-            // browser's default anchor behaviour, opening the paste in a new tab.
-            const openView = (e) => {
-              if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
-              e.preventDefault();
-              navigate(viewUrl);
-            };
+        {groupByIp ? (
+          groups.map(([ip, group]) => {
+            const totalSize = group.reduce((sum, p) => sum + p.size, 0);
             return (
-              <li key={p.id} className="recent-paste-item">
-                <div className="paste-header" style={{ marginBottom: 0 }}>
-                  <a
-                    href={viewUrl}
-                    onClick={openView}
-                    style={{ display: 'block', flex: 1, color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
-                  >
-                    <div className="paste-title">{p.title}</div>
-                    <div className="paste-meta">
-                      {new Date(p.createdAt).toLocaleString()}
-                      {` · ${formatBytes(p.size)}`}
-                      {` · ${p.visibility}`}
-                      {` · ${p.hasBlob ? 'blob' : 'text'}`}
-                      {` · IP ${p.ownerIp || 'unknown'}`}
-                    </div>
-                  </a>
+              <div key={ip} className="ip-group" style={{ marginTop: 24 }}>
+                <div className="paste-header">
+                  <div className="paste-meta">
+                    {`IP ${ip} · ${group.length} paste(s) · ${formatBytes(totalSize)}`}
+                  </div>
                   <div className="paste-actions">
                     <button
-                      className="btn btn-secondary"
-                      onClick={() => navigate(viewUrl)}
-                    >
-                      View
-                    </button>
-                    <button
                       className="btn btn-danger"
-                      onClick={() => deletePaste(p.id, p.title)}
+                      onClick={() => deletePastesByIp(ip, group)}
                     >
-                      Delete
+                      Delete all from this IP
                     </button>
                   </div>
                 </div>
-              </li>
+                <ul className="recent-pastes">{group.map(renderPasteItem)}</ul>
+              </div>
             );
-          })}
-        </ul>
+          })
+        ) : (
+          <ul className="recent-pastes">{pastes.map(renderPasteItem)}</ul>
+        )}
       </div>
     </div>
   );
+
+  // Renders one paste list item; shared by the flat and grouped-by-IP views.
+  function renderPasteItem(p) {
+    const viewUrl = `/paste/${p.id}`;
+    // Plain click = View (SPA nav). Ctrl/Cmd/Shift/middle click falls through to the
+    // browser's default anchor behaviour, opening the paste in a new tab.
+    const openView = (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+      e.preventDefault();
+      navigate(viewUrl);
+    };
+    return (
+      <li key={p.id} className="recent-paste-item">
+        <div className="paste-header" style={{ marginBottom: 0 }}>
+          <a
+            href={viewUrl}
+            onClick={openView}
+            style={{ display: 'block', flex: 1, color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
+          >
+            <div className="paste-title">{p.title}</div>
+            <div className="paste-meta">
+              {new Date(p.createdAt).toLocaleString()}
+              {` · ${formatBytes(p.size)}`}
+              {` · ${p.visibility}`}
+              {` · ${p.hasBlob ? 'blob' : 'text'}`}
+              {` · IP ${p.ownerIp || 'unknown'}`}
+            </div>
+          </a>
+          <div className="paste-actions">
+            <button className="btn btn-secondary" onClick={() => navigate(viewUrl)}>
+              View
+            </button>
+            <button className="btn btn-danger" onClick={() => deletePaste(p.id, p.title)}>
+              Delete
+            </button>
+          </div>
+        </div>
+      </li>
+    );
+  }
 }

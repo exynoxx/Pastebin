@@ -1,3 +1,7 @@
+// Max bytes for a single file OR folder upload. Mirrors the API's MAX_FILE_UPLOAD_BYTES
+// (default 50 MB) so the client can reject oversize uploads before sending them.
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
 // Human-readable byte sizes. Shared by the paste view and the admin page.
 export function formatBytes(bytes) {
   if (bytes == null) return '';

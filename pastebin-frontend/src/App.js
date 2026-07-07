@@ -7,6 +7,7 @@ import {Admin} from "./pages/Admin"
 import { PasteList } from './components/PasteList';
 import { Loading } from './components/Loading';
 import { FilePasteView } from './components/FilePasteView'
+import { MAX_UPLOAD_BYTES, formatBytes } from './utils/format';
 
 import axios from './conf';
 
@@ -111,7 +112,7 @@ function FileUploadSection({ onFileUpload, onFolderUpload, loading }) {
       >
         📁 Choose Folder
       </button>
-      <span className="file-help">or drag and drop a file below</span>
+      <span className="file-help">or drag and drop a file below — max {formatBytes(MAX_UPLOAD_BYTES)}</span>
     </div>
   );
 }
@@ -163,6 +164,13 @@ function PasteForm({ onPasteCreated }) {
   const navigate = useNavigate();
 
   const handleFileUpload = async (file) => {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setMessage({
+        type: 'error',
+        text: `File is ${formatBytes(file.size)}, which exceeds the ${formatBytes(MAX_UPLOAD_BYTES)} upload limit.`
+      });
+      return;
+    }
     setLoading(true);
 
     try {
@@ -211,6 +219,16 @@ function PasteForm({ onPasteCreated }) {
   const handleFolderUpload = async (fileList) => {
     const files = Array.from(fileList);
     if (files.length === 0) return;
+
+    // Server bounds the uncompressed total (the whole archive is built in memory), so mirror that.
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+    if (totalBytes > MAX_UPLOAD_BYTES) {
+      setMessage({
+        type: 'error',
+        text: `Folder is ${formatBytes(totalBytes)}, which exceeds the ${formatBytes(MAX_UPLOAD_BYTES)} upload limit.`
+      });
+      return;
+    }
 
     setLoading(true);
 

@@ -1,7 +1,7 @@
 ## POST /api/files/upload-folder — multipart multi-file upload, archived into a single zip.
 ##
 ## LIMITATION: zippy has no streaming zip writer, so entry contents are read into memory here.
-## Peak RAM is bounded by MAX_FOLDER_UPLOAD_BYTES (checked up front), kept well under the
+## Peak RAM is bounded by MAX_FILE_UPLOAD_BYTES (checked up front), kept well under the
 ## container memory cap. Single-file uploads (the common path) stream and aren't affected.
 
 import std/[strutils, tables, strformat]
@@ -37,11 +37,11 @@ proc handleUploadFolder*(ctx: Ctx) =
     try:
         var uncompressedTotal: int64 = 0
         for e in fileParts: uncompressedTotal += e.size
-        # Bound against the folder-specific limit, NOT the 1 GB request cap: the whole archive is
+        # Bound against the upload limit, NOT the 1 GB request cap: the whole archive is
         # built in memory (zippy has no streaming writer), so this is what keeps peak RAM in check.
-        if uncompressedTotal > ctx.cfg.maxFolderUploadBytes:
+        if uncompressedTotal > ctx.cfg.maxFileUploadBytes:
             raise newException(PayloadTooLargeError,
-                &"Folder size exceeds the maximum allowed size of {ctx.cfg.maxFolderUploadBytes div (1024*1024)}MB")
+                &"Folder size exceeds the maximum allowed size of {ctx.cfg.maxFileUploadBytes div (1024*1024)}MB")
         ensureWithinQuota(ctx.ip, uncompressedTotal, ctx.cfg.maxStorageBytesPerIp)
         var zipEntries: OrderedTable[string, string]
         for e in fileParts:

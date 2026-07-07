@@ -13,7 +13,7 @@ type
         pastePreviewChars*: int        # fixed 8192
         maxPasteBytes*: int64          # MAX_PASTE_BYTES          10 MB
         maxStorageBytesPerIp*: int64   # MAX_STORAGE_BYTES_PER_IP 100 MB
-        maxFolderUploadBytes*: int64   # MAX_FOLDER_UPLOAD_BYTES  25 MB
+        maxFileUploadBytes*: int64     # MAX_FILE_UPLOAD_BYTES    50 MB (single file & folder upload)
         untitledTitleMaxChars*: int    # fixed 40
 
         # --- framework rate limits ---
@@ -57,7 +57,7 @@ proc loadConfig*(): AppConfig =
     result.inlinePasteMaxBytes     = getLong("INLINE_PASTE_MAX_BYTES", 262_144).int
     result.maxPasteBytes           = getLong("MAX_PASTE_BYTES", 10_485_760)
     result.maxStorageBytesPerIp    = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
-    result.maxFolderUploadBytes    = getLong("MAX_FOLDER_UPLOAD_BYTES", 26_214_400)  # 25 MB zippy has no streaming writer
+    result.maxFileUploadBytes      = getLong("MAX_FILE_UPLOAD_BYTES", 52_428_800)   # 50 MB (single file & folder upload)
     result.perIpPerMinute          = getLong("RATE_LIMIT_PER_IP_PER_MIN", 120).int
     result.uploadsPerMinute        = getLong("RATE_LIMIT_UPLOADS_PER_MIN", 10).int
     result.globalConcurrency       = getLong("RATE_LIMIT_GLOBAL_CONCURRENCY", 50).int

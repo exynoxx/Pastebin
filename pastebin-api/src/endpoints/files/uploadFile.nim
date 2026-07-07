@@ -26,9 +26,9 @@ proc handleUploadFile*(ctx: Ctx) =
         return
     let entry = fileEntry.get
     try:
-        if entry.size > ctx.cfg.maxRequestBytes:
+        if entry.size > ctx.cfg.maxFileUploadBytes:
             raise newException(PayloadTooLargeError,
-                &"File size exceeds the maximum allowed size of {ctx.cfg.maxRequestBytes div (1024*1024)}MB")
+                &"File size exceeds the maximum allowed size of {ctx.cfg.maxFileUploadBytes div (1024*1024)}MB")
         ensureWithinQuota(ctx.ip, entry.size, ctx.cfg.maxStorageBytesPerIp)
         # Stream the spilled request-body part straight into a blob (flat memory).
         let (blobId, size) = saveFromFile(entry.dataFilePath)

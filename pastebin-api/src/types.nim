@@ -2,6 +2,17 @@
 ## createdAt / uploadedAt are Unix epoch milliseconds, UTC (see timeutil.nim).
 
 type
+    # Two-valued visibility. The enum's string values ARE the wire values, so `$v` / JSON / SQL
+    # all render "public"/"private" with no extra mapping (see normalizeVisibility for decoding).
+    Visibility* = enum
+        Public = "public"
+        Private = "private"
+
+    # Internal on-disk blob key (32 hex chars), a distinct type from the public base62 resource id
+    # so the two — which coexist on Paste/StoredFile and address different subsystems (SQLite vs the
+    # filesystem) — can't be swapped at a call site. The default "" means "inline, no blob".
+    BlobId* = distinct string
+
     Paste* = object
         id*: string
         title*: string
@@ -9,8 +20,8 @@ type
         size*: int64          ## total content size in bytes
         isTruncated*: bool     ## true => content is only a preview
         createdAt*: int64      ## Unix epoch milliseconds, UTC
-        visibility*: string    ## "public" | "private"
-        blobId*: string        ## internal: "" when inline. Never emitted in JSON.
+        visibility*: Visibility
+        blobId*: BlobId        ## internal: "" when inline. Never emitted in JSON.
 
     # Admin listing row: every paste AND file regardless of visibility, plus owner_ip and
     # a blob-backed flag. Only used by GET /api/admin/pastes (see endpoints/admin/listPastes).
@@ -23,7 +34,7 @@ type
         isTruncated*: bool     ## pastes only; always false for files
         hasBlob*: bool         ## blob_id != '' => stored on disk vs inline
         createdAt*: int64      ## Unix epoch milliseconds, UTC
-        visibility*: string    ## "public" | "private"
+        visibility*: Visibility
         ownerIp*: string       ## the IP that created the item
 
     PasteSummary* = object
@@ -40,8 +51,8 @@ type
         contentType*: string
         size*: int64
         uploadedAt*: int64     ## Unix epoch milliseconds, UTC
-        visibility*: string    ## "public" => listed in recent list; "private" => unlisted (direct link only)
-        blobId*: string        ## internal. Never emitted in JSON.
+        visibility*: Visibility  ## Public => listed in recent list; Private => unlisted (direct link only)
+        blobId*: BlobId        ## internal. Never emitted in JSON.
 
     # Result of resolving a downloadable file to its on-disk blob.
     DownloadData* = object
@@ -49,8 +60,11 @@ type
         fileName*: string
         blobPath*: string
 
-func normalizeVisibility*(v: string): string =
-    ## The single source of truth for the two-valued visibility field: anything that isn't the
-    ## literal "private" is treated as "public". Shared by every create/upload handler so the
-    ## rule isn't re-spelled (and can't drift) across the slices.
-    if v == "private": "private" else: "public"
+proc len*(b: BlobId): int {.borrow.}
+    ## The only string op BlobId needs to expose (inline-vs-blob checks: `blobId.len == 0`).
+
+func normalizeVisibility*(v: string): Visibility =
+    ## The single source of truth for decoding the visibility field from untrusted input OR a DB
+    ## cell: anything that isn't the literal "private" is treated as public. Shared by every
+    ## create/upload handler and the db reader so the rule isn't re-spelled (and can't drift).
+    if v == "private": Private else: Public

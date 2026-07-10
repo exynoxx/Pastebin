@@ -13,6 +13,10 @@
 import std/[json, macros, strutils]
 import ./types
 
+# Render Visibility as its wire string ("public"/"private") wherever the serialize macro emits a
+# `%*` over an object with a visibility field. Defined here so every serialize(...) call site sees it.
+proc `%`*(v: Visibility): JsonNode = %($v)
+
 macro serialize*(T: typedesc, omit: untyped = []): untyped =
     omit.expectKind(nnkBracket)
     var omitted: seq[string]

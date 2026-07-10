@@ -30,7 +30,7 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
     if byteCount <= cfg.inlinePasteMaxBytes:
         p.content = content
         p.isTruncated = false
-        p.blobId = ""
+        p.blobId = BlobId("")
     else:
         let (blobId, size) = saveFromString(content)
         p.content = buildPreview(content, cfg.pastePreviewChars)

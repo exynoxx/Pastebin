@@ -113,13 +113,13 @@ proc insertPaste*(p: Paste, ownerIp: string) =
                 INSERT INTO pastes (id, title, content, size, is_truncated, created_at, blob_id, owner_ip, visibility)
                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?);
             """, p.id, p.title, p.content, $p.size, $ord(p.isTruncated),
-                $p.createdAt, ownerIp, p.visibility)
+                $p.createdAt, ownerIp, $p.visibility)
         else:
             conn().exec(sql"""
                 INSERT INTO pastes (id, title, content, size, is_truncated, created_at, blob_id, owner_ip, visibility)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, p.id, p.title, p.content, $p.size, $ord(p.isTruncated),
-                $p.createdAt, p.blobId, ownerIp, p.visibility)
+                $p.createdAt, p.blobId.string, ownerIp, $p.visibility)
 
 proc selectPaste*(id: string): Option[Paste] =
     let rows = conn().getAllRows(sql"""
@@ -133,8 +133,8 @@ proc selectPaste*(id: string): Option[Paste] =
         size: int64OrZero(r[3]),
         isTruncated: int64OrZero(r[4]) != 0,
         createdAt: int64OrZero(r[5]),
-        blobId: r[6],
-        visibility: r[7])
+        blobId: BlobId(r[6]),
+        visibility: normalizeVisibility(r[7]))
     some(paste)
 
 proc selectRecentSummaries*(limit: int): seq[PasteSummary] =
@@ -173,7 +173,7 @@ proc selectAllContent*(): seq[AdminContentRow] =
             isTruncated: int64OrZero(r[5]) != 0,
             hasBlob: r[6].len > 0,   # blob_id NULL/"" => inline
             createdAt: int64OrZero(r[7]),
-            visibility: r[8],
+            visibility: normalizeVisibility(r[8]),
             ownerIp: r[9])
 
 proc deletePasteRow*(id: string): bool =
@@ -189,7 +189,7 @@ proc insertFile*(f: StoredFile, ownerIp: string) =
         conn().exec(sql"""
             INSERT INTO files (id, original_name, content_type, size, uploaded_at, blob_id, owner_ip, visibility)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """, f.id, f.originalName, f.contentType, $f.size, $f.uploadedAt, f.blobId, ownerIp, f.visibility)
+        """, f.id, f.originalName, f.contentType, $f.size, $f.uploadedAt, f.blobId.string, ownerIp, $f.visibility)
 
 proc selectFile*(id: string): Option[StoredFile] =
     let rows = conn().getAllRows(sql"""
@@ -201,7 +201,7 @@ proc selectFile*(id: string): Option[StoredFile] =
     let stored = StoredFile(
         id: r[0], originalName: r[1], contentType: r[2],
         size: int64OrZero(r[3]),
-        uploadedAt: int64OrZero(r[4]), blobId: r[5], visibility: r[6])
+        uploadedAt: int64OrZero(r[4]), blobId: BlobId(r[5]), visibility: normalizeVisibility(r[6]))
     some(stored)
 
 proc deleteFileRow*(id: string): bool =

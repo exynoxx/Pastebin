@@ -3,7 +3,7 @@
 ## owns the HTTP server + per-request glue. Listens on port 8080 behind nginx.
 
 import std/strformat
-import config, db, blobstore, ratelimit, ntfy, clientip, accesslog
+import config, db, blobstore, ratelimit, ntfy, clientip, accesslog, pastecache
 import webframework/server
 import endpoints/routes, endpoints/admin/guard
 
@@ -12,6 +12,7 @@ proc main() =
 
     initDb(cfg.sqlitePath)
     initBlobStore(cfg.blobStoragePath)
+    initPasteCache(cfg)
     initAdminGuard()
     initRateLimiter(cfg)
     initAccessLog(cfg)

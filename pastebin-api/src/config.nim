@@ -16,6 +16,10 @@ type
         maxFileUploadBytes*: int64     # MAX_FILE_UPLOAD_BYTES    50 MB (single file & folder upload)
         untitledTitleMaxChars*: int    # fixed 40
 
+        # --- paste memory cache ---
+        cacheMaxBytes*: int64          # CACHE_MAX_BYTES  128 MB (dirty pending + clean LRU combined)
+        pasteCacheEnabled*: bool       # PASTE_CACHE      true (false => always persist synchronously)
+
         # --- framework rate limits ---
         perIpPerMinute*: int           # RATE_LIMIT_PER_IP_PER_MIN     120
         uploadsPerMinute*: int         # RATE_LIMIT_UPLOADS_PER_MIN    10
@@ -85,3 +89,5 @@ proc loadConfig*(): AppConfig =
     result.accessLogPath           = getEnv("ACCESS_LOG_PATH", "")
     result.accessLogMaxBytes       = getLong("ACCESS_LOG_MAX_BYTES", 5_242_880)   # 5 MB
     result.accessLogFlushMs        = getLong("ACCESS_LOG_FLUSH_MS", 5_000).int    # 5 s
+    result.cacheMaxBytes           = getLong("CACHE_MAX_BYTES", 134_217_728)   # 128 MB
+    result.pasteCacheEnabled       = getEnv("PASTE_CACHE", "true").toLowerAscii() != "false"

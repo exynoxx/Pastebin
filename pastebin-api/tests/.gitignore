@@ -1,0 +1,3 @@
+# Compiled test binaries (nim c -r drops the executable next to its source)
+test_*
+!test_*.nim

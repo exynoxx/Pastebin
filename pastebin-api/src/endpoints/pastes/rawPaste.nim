@@ -1,10 +1,21 @@
-## GET /api/pastes/{id}/raw — full raw content: a streamed blob (Range-capable) or inline text.
+## GET /api/pastes/{id}/raw — full raw content: from the memory cache, a streamed blob (Range-capable),
+## or inline text. A cache hit serves the full content from RAM while the paste is still pending; once
+## it is persisted and blob-backed we stream from disk so Range keeps working.
 
 import std/options
 import ../routes
-import ../../types, ../../db, ../../blobstore
+import ../../types, ../../db, ../../blobstore, ../../pastecache
 
 proc handleRawPaste*(ctx: Ctx, id: string) =
+    let rv = acquireForRaw(id)
+    if rv.isSome:
+        let v = rv.get
+        if (not v.dirty) and v.blobId.len > 0 and blobExists(v.blobId):
+            ctx.req.respondFile(blobPath(v.blobId), "text/plain; charset=utf-8",
+                rangeHeader = ctx.req.header("Range"))
+        else:
+            ctx.req.respond(200, v.content, contentType = "text/plain; charset=utf-8")
+        return
     let p = fetchOr404(ctx, selectPaste(id), "Paste not found")
     if p.blobId.len > 0 and blobExists(p.blobId):
         ctx.req.respondFile(blobPath(p.blobId), "text/plain; charset=utf-8",

@@ -7,13 +7,15 @@
 import std/[json, strutils, unicode, strformat]
 import ../routes
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids
+       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids, ../../pastecache
 
 func deriveTitle(content: string, maxChars: int): string
 func buildPreview(content: string, previewChars: int): string
 
 proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string): Paste =
     ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) on oversize/over-quota.
+    ## Fast path: keep full content in RAM and return immediately; a background thread persists it.
+    ## Fallback (cache disabled or over budget): persist the blob + DB row before returning.
     let id = newId()
     let ttl = if title.strip().len == 0: deriveTitle(content, cfg.untitledTitleMaxChars)
               else: title.strip()
@@ -26,20 +28,29 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
 
     ensureWithinQuota(ownerIp, byteCount, cfg.maxStorageBytesPerIp)
 
+    # Build the display/stored shape. For large pastes the blob is written later (by the persister on
+    # the fast path, or below on the fallback path), so blobId stays "" here.
     var p = Paste(id: id, title: ttl, size: byteCount, visibility: visibility, createdAt: nowMillis())
     if byteCount <= cfg.inlinePasteMaxBytes:
         p.content = content
         p.isTruncated = false
         p.blobId = BlobId("")
     else:
-        let (blobId, size) = saveFromString(content)
         p.content = buildPreview(content, cfg.pastePreviewChars)
-        p.size = size
         p.isTruncated = true
-        p.blobId = blobId
+        p.blobId = BlobId("")
 
-    # Persist last. If the insert fails (e.g. the astronomically unlikely PK collision), delete the
-    # blob we just wrote so a failed create can't orphan a blob on disk.
+    # Fast path: admit full content to the cache and return now.
+    if tryAdmit(p, content, ownerIp):
+        notifyPasteCreated(p)
+        return p
+
+    # Fallback: persist synchronously before returning (blob first for large pastes, DB row last, with
+    # blob-cleanup-on-insert-failure so a failed create can't orphan a blob on disk).
+    if p.isTruncated:
+        let (blobId, size) = saveFromString(content)
+        p.blobId = blobId
+        p.size = size
     try:
         insertPaste(p, ownerIp)
     except CatchableError:

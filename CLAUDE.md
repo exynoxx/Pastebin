@@ -159,7 +159,7 @@ Compose v2.39.2, OpenMediaVault 7. OMV's web UI was moved off :80 → **:9000** 
 
 ## Access log
 
-The API writes one plaintext line per request — `timestamp ip method path` — via `accesslog.nim`, an
+The API writes one plaintext line per request — `timestamp ip method path status durationms` — via `accesslog.nim`, an
 app-level middleware registered as the **outermost** global layer (before `rateLimit` in `routes.nim`),
 so it records every access including shed (503) and 404 responses. Enabled by `ACCESS_LOG_PATH`
 (`""` = disabled); both compose files set it to `/data/logs/access.log`, backed by the `log-data`

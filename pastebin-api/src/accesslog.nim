@@ -1,8 +1,11 @@
-## Access log: one plaintext line per request — `timestamp ip method path`.
+## Access log: one plaintext line per request — `timestamp ip method path status durationms`.
 ##
 ## Registered as the OUTERMOST global middleware (before rate limiting — see endpoints/routes.nim),
-## so it records EVERY access, including requests the rate limiter sheds (503) or that 404. It logs
-## on the way in (before `next()`), so a downstream short-circuit still leaves a record.
+## so it records EVERY access, including requests the rate limiter sheds (503) or that 404. The
+## timestamp is captured on the way in (arrival time), but the line is buffered on the way OUT — in a
+## `finally` around `next()` — so it can carry the status the chain actually produced. Because it wraps
+## `next()`, a downstream short-circuit, or a handler that throws, still leaves a record; when the chain
+## unwinds without writing a status (unhandled error / no response) the server sends 500, so we log 500.
 ##
 ## Lines are accumulated in an in-memory buffer and flushed to disk periodically by a background
 ## thread (every `flushMs`), rather than one write+fsync per request — the log stays cheap under load
@@ -18,7 +21,7 @@
 ## Under Nim's shared-heap ORC the buffer + file handle are reachable from all worker threads and the
 ## flusher thread, so a single process-wide lock guards every access (mirrors ratelimit.nim's gLock).
 
-import std/[os, locks, strutils]
+import std/[os, locks, strutils, monotimes, times]
 import config, timeutil
 import webframework/[context, middleware]
 
@@ -60,17 +63,27 @@ proc initAccessLog*(cfg: AppConfig) =
     createThread(gFlusher, flushLoop)
 
 proc accessLog*(): Middleware[AppConfig] =
-    ## Request middleware: append `timestamp ip method path` to the in-memory buffer, then proceed.
-    ## The background flusher writes it to disk (see flushLoop).
+    ## Request middleware: run the chain, then append `timestamp ip method path status durationms` to
+    ## the in-memory buffer. The background flusher writes it to disk (see flushLoop).
     result = proc(ctx: Ctx[AppConfig], next: Next) {.gcsafe.} =
         {.cast(gcsafe).}:
-            if gEnabled:
-                let line = formatMillisUtc(nowMillis()) & " " & ctx.ip & " " &
-                    ctx.httpMethod & " " & ctx.path
+            if not gEnabled:
+                next()
+                return
+            let ts = formatMillisUtc(nowMillis())   # arrival time, before the chain runs
+            let started = getMonoTime()             # monotonic: elapsed is immune to clock changes
+            try:
+                next()
+            finally:
+                let elapsedMs = (getMonoTime() - started).inMilliseconds
+                # statusCode is 0 if the chain unwound without writing one (throw / no response);
+                # the server responds 500 in that case, so log 500.
+                let status = if ctx.req.statusCode != 0: ctx.req.statusCode else: 500
+                let line = ts & " " & ctx.ip & " " & ctx.httpMethod & " " &
+                    ctx.path & " " & $status & " " & $elapsedMs & "ms"
                 withLock gLock:
                     gBuf.add line
                     gBuf.add '\n'
-            next()
 
 # ---- private helpers -------------------------------------------------------
 

@@ -30,6 +30,7 @@ type
         remoteAddress*: string
         socket: Socket
         responded: bool
+        statusCode*: int                ## status actually sent (0 until a response is written)
 
     RequestHandler* = proc(req: Request) {.nimcall, gcsafe.}
 
@@ -130,11 +131,12 @@ proc buildHead(code: int, headers: seq[(string, string)]): string =
         result.add k & ": " & v & "\r\n"
     result.add "Connection: close\r\n\r\n"
 
-proc writeStatusAndHeaders(sock: Socket, code: int,
+proc writeStatusAndHeaders(req: Request, code: int,
                            headers: seq[(string, string)]) =
     ## Send the status line + headers only. Used by the streaming paths (respondFile), where the
     ## body can't be coalesced into one buffer.
-    sock.sendAll(buildHead(code, headers))
+    req.statusCode = code
+    req.socket.sendAll(buildHead(code, headers))
 
 proc respond*(req: Request, statusCode: int, body: string,
               contentType = "application/json; charset=utf-8",
@@ -142,6 +144,7 @@ proc respond*(req: Request, statusCode: int, body: string,
     ## Buffered response (JSON / small text). Sets Content-Type + Content-Length.
     if req.responded: return
     req.responded = true
+    req.statusCode = statusCode
     var hs: seq[(string, string)]
     hs.add ("Content-Type", contentType)
     hs.add ("Content-Length", $body.len)
@@ -207,6 +210,7 @@ proc respondFile*(req: Request, path, contentType: string,
 
     var f: File
     if not open(f, path, fmRead):
+        req.statusCode = 404
         let body = $(%*{"error": "Not found"})
         swallowException:
             var msg = buildHead(404,
@@ -229,17 +233,17 @@ proc respondFile*(req: Request, path, contentType: string,
         if r.ok and not r.satisfiable:
             hs.add ("Content-Range", "bytes */" & $size)
             hs.add ("Content-Length", "0")
-            writeStatusAndHeaders(req.socket, 416, hs)
+            writeStatusAndHeaders(req, 416, hs)
             return
         if r.ok and r.satisfiable:
             let count = r.last - r.first + 1
             hs.add ("Content-Range", "bytes " & $r.first & "-" & $r.last & "/" & $size)
             hs.add ("Content-Length", $count)
-            writeStatusAndHeaders(req.socket, 206, hs)
+            writeStatusAndHeaders(req, 206, hs)
             streamFileRange(req.socket, f, r.first, count)
         else:
             hs.add ("Content-Length", $size)
-            writeStatusAndHeaders(req.socket, 200, hs)
+            writeStatusAndHeaders(req, 200, hs)
             streamFileRange(req.socket, f, 0, size)
 
 # ---- request reading -------------------------------------------------------

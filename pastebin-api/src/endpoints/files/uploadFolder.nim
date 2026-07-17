@@ -7,12 +7,12 @@
 import std/[strutils, tables, strformat]
 import ../routes, ../../json
 import ../../types, ../../apperrors, webframework/multipart
-importuse db
-importuse blobstore
-importuse quota
-importuse ntfy
-importuse timeutil
-importuse ids
+referencing db
+referencing blobstore
+referencing quota
+referencing ntfy
+referencing timeutil
+referencing ids
 import zippy/ziparchives
 
 func zipEntryName(entry: MultipartEntry): string

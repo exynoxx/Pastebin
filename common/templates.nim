@@ -20,10 +20,10 @@ template returnif*(cond: bool) =
     ## call sites: `returnif: <cond>`.
     if cond: return
 
-template importuse*(m: untyped) =
-    ## Import module `m` for qualified-only access: `importuse blobstore` expands to
+template referencing*(m: untyped) =
+    ## Import module `m` for qualified-only access: `referencing blobstore` expands to
     ## `from blobstore import nil`, so callers must write `blobstore.foo(...)` and can't shadow the
-    ## origin with a bare `foo(...)`. Named `importuse` (not `use`) because `use` collides with
+    ## origin with a bare `foo(...)`. Named `referencing` (not `use`) because `use` collides with
     ## `routetable.use`, and `using` is a reserved keyword. Relies on `--path:"src"` (nim.cfg) so a
     ## bare module name resolves from nested endpoint files.
     from m import nil

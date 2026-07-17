@@ -6,7 +6,7 @@
 import std/strformat
 import apperrors
 import common/templates
-importuse db
+referencing db
 
 proc ensureWithinQuota*(ownerIp: string, newSize, maxStorageBytesPerIp: int64) =
     ## Raises PayloadTooLargeError (-> 413) when newSize would push the IP over its budget.

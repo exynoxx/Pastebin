@@ -4,8 +4,8 @@
 import std/[json, strutils, options]
 import ../routes
 import ../../types, ../../apperrors
-importuse db
-importuse timeutil
+referencing db
+referencing timeutil
 import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =

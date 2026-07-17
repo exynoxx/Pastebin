@@ -5,13 +5,13 @@
 import std/strformat
 import config
 import common/templates
-importuse blobstore
-importuse ratelimit
-importuse ntfy
-importuse clientip
-importuse accesslog
-importuse pastecache
-importuse db
+referencing blobstore
+referencing ratelimit
+referencing ntfy
+referencing clientip
+referencing accesslog
+referencing pastecache
+referencing db
 import webframework/server
 import endpoints/routes, endpoints/admin/guard
 

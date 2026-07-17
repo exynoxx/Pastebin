@@ -4,9 +4,9 @@
 
 import std/options
 import ../routes
-importuse db
-importuse blobstore
-importuse pastecache
+referencing db
+referencing blobstore
+referencing pastecache
 import ../../types
 
 proc handleRawPaste*(ctx: Ctx, id: string) =

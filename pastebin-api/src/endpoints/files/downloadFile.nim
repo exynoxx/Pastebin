@@ -5,8 +5,8 @@
 import std/[options, strutils]
 import ../routes
 import ../../types
-importuse db
-importuse blobstore
+referencing db
+referencing blobstore
 
 func contentDispositionAttachment*(name: string): string =
     ## Build a safe `Content-Disposition: attachment` header value for a user-supplied filename.

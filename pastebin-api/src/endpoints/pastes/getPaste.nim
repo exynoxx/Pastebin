@@ -2,8 +2,8 @@
 
 import std/[json, options]
 import ../routes
-importuse db
-importuse pastecache
+referencing db
+referencing pastecache
 import ../../types, ../../json
 
 serialize(Paste, omit = [blobId])

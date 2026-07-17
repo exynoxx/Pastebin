@@ -3,7 +3,7 @@
 import std/json
 import ../routes, guard
 import ../../types, ../../json
-importuse db
+referencing db
 
 serialize(AdminContentRow)
 

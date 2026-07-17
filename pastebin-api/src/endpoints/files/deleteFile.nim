@@ -3,8 +3,8 @@
 import std/[json, options]
 import ../routes, ../admin/guard
 import ../../types
-importuse db
-importuse blobstore
+referencing db
+referencing blobstore
 
 proc handleDeleteFile*(ctx: Ctx, id: string) =
     returnif: not ctx.requireAdmin()

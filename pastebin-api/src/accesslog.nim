@@ -24,7 +24,7 @@
 import std/[os, locks, strutils, monotimes, times]
 import config
 import common/templates
-importuse timeutil
+referencing timeutil
 import webframework/[context, middleware]
 
 var

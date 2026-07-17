@@ -7,11 +7,11 @@
 import std/[json, strutils, unicode, strformat]
 import ../routes
 import ../../types, ../../apperrors
-importuse quota
-importuse ntfy
-importuse timeutil
-importuse ids
-importuse pastecache
+referencing quota
+referencing ntfy
+referencing timeutil
+referencing ids
+referencing pastecache
 
 func deriveTitle(content: string, maxChars: int): string
 func buildPreview(content: string, previewChars: int): string

@@ -2,7 +2,7 @@
 
 import std/[json, strutils]
 import ../routes
-importuse db
+referencing db
 import ../../types, ../../json
 
 serialize(PasteSummary)

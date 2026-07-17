@@ -3,12 +3,12 @@
 import std/[options, strformat]
 import ../routes, ../../json
 import ../../types, ../../apperrors, webframework/multipart
-importuse db
-importuse blobstore
-importuse quota
-importuse ntfy
-importuse timeutil
-importuse ids
+referencing db
+referencing blobstore
+referencing quota
+referencing ntfy
+referencing timeutil
+referencing ids
 
 proc handleUploadFile*(ctx: Ctx) =
     var entries: seq[MultipartEntry]

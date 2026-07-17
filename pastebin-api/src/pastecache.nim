@@ -10,8 +10,8 @@
 import std/[locks, tables, options]
 import types, config
 import common/templates
-importuse blobstore
-importuse db
+referencing blobstore
+referencing db
 
 type
   CacheEntry = ref object

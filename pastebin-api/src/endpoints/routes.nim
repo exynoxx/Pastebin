@@ -9,8 +9,8 @@ import webframework/server
 import webframework/context as fctx
 import common/templates
 import ../config
-importuse ratelimit
-importuse accesslog
+referencing ratelimit
+referencing accesslog
 
 # Re-export what handlers reach for through this module — httpserver (Request + response helpers),
 # config (AppConfig), the framework's Ctx-level helpers, and the shared control-flow templates

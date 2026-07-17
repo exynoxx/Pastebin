@@ -26,12 +26,12 @@ type
 # ---- request-info accessors ------------------------------------------------
 # Thin conveniences so a handler reads request info off its Ctx instead of reaching through `.req`.
 
-proc header*[E](ctx: Ctx[E], name: string): string = ctx.req.header(name)
-proc queryParam*[E](ctx: Ctx[E], name: string): string = ctx.req.queryParam(name)
+func header*[E](ctx: Ctx[E], name: string): string = ctx.req.header(name)
+func queryParam*[E](ctx: Ctx[E], name: string): string = ctx.req.queryParam(name)
 func httpMethod*[E](ctx: Ctx[E]): string = ctx.req.httpMethod
 func path*[E](ctx: Ctx[E]): string = ctx.req.path
 func remoteAddress*[E](ctx: Ctx[E]): string = ctx.req.remoteAddress
-proc origin*[E](ctx: Ctx[E]): string = ctx.req.header("Origin")
+func origin*[E](ctx: Ctx[E]): string = ctx.req.header("Origin")
 
 proc respond*[E](ctx: Ctx[E], statusCode: int, body: string,
                  contentType = "application/json; charset=utf-8",

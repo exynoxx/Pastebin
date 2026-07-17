@@ -8,7 +8,7 @@ type AppState = object
 proc handleHello(ctx: Ctx[AppState]) =
     ctx.respond(200, ctx.cfg.greeting, contentType = "text/plain; charset=utf-8")
 
-proc registerRoutes(): RouteTable[AppState] =
+func registerRoutes(): RouteTable[AppState] =
     result.get("/hello", handleHello)
 
 when isMainModule:

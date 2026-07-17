@@ -71,7 +71,7 @@ proc writeExact(f: File, d: openArray[char], lo, hi: int) =
             raise newException(MultipartError, "failed writing multipart temp file")
         i += n
 
-proc appendTo(s: var string, d: openArray[char]) =
+func appendTo(s: var string, d: openArray[char]) =
     ## Append an openArray[char] to a string via a single copy.
     if d.len == 0: return
     let start = s.len

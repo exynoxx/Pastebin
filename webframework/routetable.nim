@@ -14,19 +14,19 @@ type
 
 # One proc per verb so call sites read as a table: result.get(...), result.post(...).
 
-proc get*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
+func get*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
     t.router.add("GET", path, handler)
 
-proc post*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
+func post*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
     t.router.add("POST", path, handler)
 
-proc delete*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
+func delete*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
     t.router.add("DELETE", path, handler)
 
-proc put*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
+func put*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
     t.router.add("PUT", path, handler)
 
-proc patch*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
+func patch*[E](t: var RouteTable[E], path: string, handler: Handler[E]) =
     t.router.add("PATCH", path, handler)
 
 # ---- param-binding overloads ------------------------------------------------
@@ -56,10 +56,10 @@ template delete*[E](t: var RouteTable[E], path: string, handler: proc(ctx: Ctx[E
 
 # ---- global middleware + 404 ------------------------------------------------
 
-proc use*[E](t: var RouteTable[E], m: Middleware[E]) =
+func use*[E](t: var RouteTable[E], m: Middleware[E]) =
     ## Register a global middleware. The first `use` is the outermost layer of the onion.
     t.global.add m
 
-proc onNotFound*[E](t: var RouteTable[E], handler: Handler[E]) =
+func onNotFound*[E](t: var RouteTable[E], handler: Handler[E]) =
     ## Override the default JSON 404 (still wrapped by the global chain).
     t.notFound = handler

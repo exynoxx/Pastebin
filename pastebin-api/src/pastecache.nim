@@ -11,7 +11,7 @@
 ## (never evicted); only clean entries are LRU-evictable.
 
 import std/[locks, tables, options]
-import types, config, db, blobstore, macros
+import types, config, db, blobstore
 
 type
   CacheEntry = ref object
@@ -75,7 +75,7 @@ proc initPasteCache*(cfg: AppConfig) =
   clearEntries()
   gTable = initTable[string, CacheEntry]()
   gPendingByIp = initTable[string, int64]()
-  returnif: not gEnabled
+  if not gEnabled: return
   gQueue.open()
   gPersisterStarted = true
   createThread(gPersister, persistLoop)
@@ -145,7 +145,7 @@ proc acquireForRaw*(id: string): Option[CachedRawView] =
     touch(e)
     result = some(CachedRawView(dirty: e.dirty, blobId: e.blobId, entry: e))
 
-proc content*(v: CachedRawView): lent string = v.entry.fullContent
+func content*(v: CachedRawView): lent string = v.entry.fullContent
 
 proc markPersisted*(id: string, blobId: BlobId): bool =
   ## Called by the persister after a successful blob+DB write: flip dirty->clean, record blobId,
@@ -194,7 +194,7 @@ proc pushFront(e: CacheEntry) =
   if gTail == nil: gTail = e
 
 proc touch(e: CacheEntry) =
-  returnif: gHead == e
+  if gHead == e: return
   unlink(e)
   pushFront(e)
 

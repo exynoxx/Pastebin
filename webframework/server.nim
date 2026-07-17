@@ -29,11 +29,11 @@ proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.}
 
 # ---- public API ------------------------------------------------------------
 
-proc defaultConfig*(): ServerConfig =
+func defaultConfig*(): ServerConfig =
     ServerConfig(port: 8080, numThreads: 4, bodySpillThreshold: 1 shl 20,
                  maxBodyBytes: 100'i64 shl 20, networkLog: false)
 
-proc defaultResolveIp*(req: Request): string {.gcsafe.} =
+func defaultResolveIp*(req: Request): string {.gcsafe.} =
     ## Behind nginx: trust the first `X-Forwarded-For` hop; fall back to the socket peer address.
     let xff = req.header("X-Forwarded-For")
     if xff.len > 0:

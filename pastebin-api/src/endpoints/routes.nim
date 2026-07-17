@@ -28,7 +28,7 @@ import
     files/getFile, files/deleteFile, files/downloadFile, files/viewFile,
     admin/listPastes, admin/deletePaste
 
-proc registerRoutes*(): RouteTable[AppConfig] =
+func registerRoutes*(): RouteTable[AppConfig] =
     result.use(accessLog())   # outermost: records every access, even those rate-limited (503) or 404
     result.use(rateLimit())
     result.get(   "/api/pastes",                       handleRecentPastes)

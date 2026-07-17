@@ -50,7 +50,7 @@ var
     gRecvBuf {.threadvar.}: string
     gSendBuf {.threadvar.}: string
 
-proc addBytes(dst: var string, src: string, n: int) =
+func addBytes(dst: var string, src: string, n: int) =
     ## Append src[0 ..< n] to dst without allocating the `src[0 ..< n]` slice temporary.
     if n <= 0: return
     let old = dst.len
@@ -74,7 +74,7 @@ func reason(code: int): string =
 
 # ---- request helpers -------------------------------------------------------
 
-proc header*(req: Request, name: string): string =
+func header*(req: Request, name: string): string =
     ## Case-insensitive header lookup; "" if absent (standard HTTP semantics).
     for (k, v) in req.headers:
         if cmpIgnoreCase(k, name) == 0:
@@ -103,7 +103,7 @@ proc bodyFile*(req: Request): string =
         req.body = ""
     req.bodyFilePath
 
-proc queryParam*(req: Request, name: string): string =
+func queryParam*(req: Request, name: string): string =
     ## Value of a query parameter, or "" if absent. decodeQuery handles '+'/%xx.
     if req.rawQuery.len == 0: return ""
     for (k, v) in decodeQuery(req.rawQuery):
@@ -125,7 +125,7 @@ proc sendAll(sock: Socket, buf: pointer, size: int) =
         if n <= 0: break
         sent += n
 
-proc buildHead(code: int, headers: seq[(string, string)]): string =
+func buildHead(code: int, headers: seq[(string, string)]): string =
     result = "HTTP/1.1 " & $code & " " & reason(code) & "\r\n"
     for (k, v) in headers:
         result.add k & ": " & v & "\r\n"
@@ -248,7 +248,7 @@ proc respondFile*(req: Request, path, contentType: string,
 
 # ---- request reading -------------------------------------------------------
 
-proc parseRequestLineAndHeaders(req: Request, headerText: string): bool =
+func parseRequestLineAndHeaders(req: Request, headerText: string): bool =
     ## Parse the request line + header block by index, allocating only the strings actually kept
     ## (method, path, query, header keys/values). Avoids split()'s per-line seq and strip()'s
     ## per-header temporaries. Returns false on a malformed request line.

@@ -16,13 +16,13 @@ type
     Router*[P] = object
         routes: seq[Route[P]]
 
-proc splitPath*(p: string): seq[string] =
+func splitPath*(p: string): seq[string] =
     p.strip(chars = {'/'}).split('/')
 
-proc isParam(seg: string): bool =
+func isParam(seg: string): bool =
     seg.len >= 2 and seg[0] == '{' and seg.endsWith('}')
 
-proc add*[P](r: var Router[P], verb, pattern: string, payload: P) =
+func add*[P](r: var Router[P], verb, pattern: string, payload: P) =
     ## Register a route. Call at startup, before the workers start.
     let segs = splitPath(pattern)
     var hasParams = false
@@ -30,14 +30,14 @@ proc add*[P](r: var Router[P], verb, pattern: string, payload: P) =
         if isParam(s): hasParams = true
     r.routes.add Route[P](verb: verb, segments: segs, hasParams: hasParams, payload: payload)
 
-proc segEq(path: string, a, b: int, seg: string): bool =
+func segEq(path: string, a, b: int, seg: string): bool =
     ## path[a ..< b] == seg, compared in place (no slice allocation).
     if b - a != seg.len: return false
     for i in 0 ..< seg.len:
         if path[a + i] != seg[i]: return false
     true
 
-proc tryMatch[P](route: Route[P], path: string, lo, hi: int,
+func tryMatch[P](route: Route[P], path: string, lo, hi: int,
                  params: var seq[string]): bool =
     ## Walk the '/'-delimited segments of path[lo ..< hi] against route.segments, with the same
     ## semantics as splitPath (leading/trailing '/' already stripped into lo/hi; interior empty
@@ -59,7 +59,7 @@ proc tryMatch[P](route: Route[P], path: string, lo, hi: int,
         start = segEnd + 1
     idx == n                                            # fewer path segments than the route => no
 
-proc match*[P](r: Router[P], verb, path: string):
+func match*[P](r: Router[P], verb, path: string):
         tuple[found: bool, payload: P, params: seq[string]] =
     ## Match a raw request path without splitting it into a seq first. Literal routes win over
     ## `{param}` routes, so a fixed path like /api/files/upload is never swallowed by

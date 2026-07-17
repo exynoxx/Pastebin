@@ -29,7 +29,7 @@
 ## HTTP presentation together is why this module depends on the framework.
 
 import std/[tables, deques, locks, times, json, strutils]
-import config, macros
+import config
 import webframework/[httpserver, context, middleware]
 
 const
@@ -81,16 +81,16 @@ var
     gLastSweep: int64
 
 # Bodies live at the bottom so the public API reads first; Nim needs them declared before use.
-proc slidingRoll(st: SlidingState, nowSec: int64)
-proc slidingWouldAllow(st: SlidingState, limit: int64): bool
-proc slidingCommit(st: SlidingState)
-proc fixedRoll(st: FixedState, nowSec: int64)
-proc fixedWouldAllow(st: FixedState, limit: int64): bool
-proc fixedCommit(st: FixedState)
+func slidingRoll(st: SlidingState, nowSec: int64)
+func slidingWouldAllow(st: SlidingState, limit: int64): bool
+func slidingCommit(st: SlidingState)
+func fixedRoll(st: FixedState, nowSec: int64)
+func fixedWouldAllow(st: FixedState, limit: int64): bool
+func fixedCommit(st: FixedState)
 proc maybeSweep(nowSec: int64)
 proc ipState(ip: string, nowSec: int64): IpState
-proc allow(penalized: bool): Decision
-proc deny(retryAfterSeconds: int, penalized: bool): Decision
+func allow(penalized: bool): Decision
+func deny(retryAfterSeconds: int, penalized: bool): Decision
 
 template withIpState(ip: string; nowSec, st, body: untyped) =
     ## The shared preamble of every per-IP policy check: take the process lock, sweep idle entries,
@@ -214,7 +214,7 @@ proc rejectPasteLimit*(ctx: Ctx[AppConfig], d: Decision): bool =
 
 # ---- private helpers -------------------------------------------------------
 
-proc slidingRoll(st: SlidingState, nowSec: int64) =
+func slidingRoll(st: SlidingState, nowSec: int64) =
     ## Advance the segmented window to `nowSec`, zeroing segments that rotated out. Pure time
     ## advancement — consumes no budget — so it's safe to run before deciding to admit. Caller
     ## holds gLock.
@@ -229,30 +229,30 @@ proc slidingRoll(st: SlidingState, nowSec: int64) =
                 st.counts[int((st.lastSeg + d) mod Segments)] = 0
         st.lastSeg = seg
 
-proc slidingWouldAllow(st: SlidingState, limit: int64): bool =
+func slidingWouldAllow(st: SlidingState, limit: int64): bool =
     ## True if the window (already rolled) has room. Read-only. Caller holds gLock.
     var total = 0
     for c in st.counts: total += c
     total.int64 < limit
 
-proc slidingCommit(st: SlidingState) =
+func slidingCommit(st: SlidingState) =
     ## Record one request in the current segment. Caller holds gLock.
     st.counts[int(st.lastSeg mod Segments)].inc
 
-proc fixedRoll(st: FixedState, nowSec: int64) =
+func fixedRoll(st: FixedState, nowSec: int64) =
     let winStart = (nowSec div WindowSec) * WindowSec
     if st.windowStart != winStart:
         st.windowStart = winStart
         st.count = 0
 
-proc fixedWouldAllow(st: FixedState, limit: int64): bool = st.count.int64 < limit
-proc fixedCommit(st: FixedState) = st.count.inc
+func fixedWouldAllow(st: FixedState, limit: int64): bool = st.count.int64 < limit
+func fixedCommit(st: FixedState) = st.count.inc
 
 proc maybeSweep(nowSec: int64) =
     ## Drop idle per-IP entries so the table can't grow unbounded; runs at most once per window.
     ## Keeps an IP while its paste penalty is active OR it has been seen recently by either policy.
     ## Caller holds gLock.
-    returnif: nowSec - gLastSweep < WindowSec
+    if nowSec - gLastSweep < WindowSec: return
     gLastSweep = nowSec
     let idleCutoff = max(WindowSec * 2, max(gPasteWindowSeconds, gPastePenaltySeconds)).int64
     var stale: seq[string]
@@ -271,8 +271,8 @@ proc ipState(ip: string, nowSec: int64): IpState =
     result = gIps[ip]
     result.lastSeen = nowSec
 
-proc allow(penalized: bool): Decision =
+func allow(penalized: bool): Decision =
     Decision(allowed: true, retryAfterSeconds: 0, penalized: penalized)
 
-proc deny(retryAfterSeconds: int, penalized: bool): Decision =
+func deny(retryAfterSeconds: int, penalized: bool): Decision =
     Decision(allowed: false, retryAfterSeconds: retryAfterSeconds, penalized: penalized)

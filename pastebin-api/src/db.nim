@@ -13,7 +13,7 @@
 
 import std/[locks, os, strutils, options]
 import db_connector/db_sqlite
-import types, macros
+import types
 
 var
     gDbPath: string
@@ -42,7 +42,7 @@ proc columnExists(db: DbConn, table, column: string): bool =
 
 proc addColumnIfMissing(db: DbConn, table, column, typ: string) =
     ## SQLite has no "ADD COLUMN IF NOT EXISTS"; add only when absent (idempotent migration).
-    returnif: db.columnExists(table, column)
+    if db.columnExists(table, column): return
     db.exec(sql("ALTER TABLE " & table & " ADD COLUMN " & column & " " & typ & ";"))
 
 proc initDb*(sqlitePath: string) =

@@ -22,7 +22,7 @@
 ## flusher thread, so a single process-wide lock guards every access (mirrors ratelimit.nim's gLock).
 
 import std/[os, locks, strutils, monotimes, times]
-import config, timeutil, macros
+import config, timeutil
 import webframework/[context, middleware]
 
 var
@@ -49,7 +49,7 @@ proc initAccessLog*(cfg: AppConfig) =
     ## Open the active log for appending, seed the rotation counter, and start the periodic flusher.
     ## No-op when disabled.
     gEnabled = cfg.accessLogPath.len > 0
-    returnif: not gEnabled
+    if not gEnabled: return
     gPath = cfg.accessLogPath
     gMaxBytes = cfg.accessLogMaxBytes
     gFlushMs = max(1, cfg.accessLogFlushMs)
@@ -62,7 +62,7 @@ proc initAccessLog*(cfg: AppConfig) =
     initLock(gLock)
     createThread(gFlusher, flushLoop)
 
-proc accessLog*(): Middleware[AppConfig] =
+func accessLog*(): Middleware[AppConfig] =
     ## Request middleware: run the chain, then append `timestamp ip method path status durationms` to
     ## the in-memory buffer. The background flusher writes it to disk (see flushLoop).
     result = proc(ctx: Ctx[AppConfig], next: Next) {.gcsafe.} =
@@ -97,7 +97,7 @@ proc flushLoop() {.thread.} =
 
 proc flushBuffer() =
     ## Called under gLock. Write and fsync the accumulated lines, then rotate if the file is full.
-    returnif: gBuf.len == 0
+    if gBuf.len == 0: return
     gFile.write(gBuf)
     gFile.flushFile()
     gCurBytes += gBuf.len

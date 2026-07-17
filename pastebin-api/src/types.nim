@@ -60,7 +60,7 @@ type
         fileName*: string
         blobPath*: string
 
-proc len*(b: BlobId): int {.borrow.}
+func len*(b: BlobId): int {.borrow.}
     ## The only string op BlobId needs to expose (inline-vs-blob checks: `blobId.len == 0`).
 
 func normalizeVisibility*(v: string): Visibility =

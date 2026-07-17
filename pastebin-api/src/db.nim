@@ -184,6 +184,26 @@ proc deletePasteRow*(id: string): bool =
         affected = conn().execAffectedRows(sql"DELETE FROM pastes WHERE id = ?;", id)
     affected > 0
 
+proc deleteRecentPastes*(n: int): seq[tuple[id: string, blobId: BlobId]] =
+    ## Bulk-delete the N most-recently-created pastes in a single statement — one COMMIT/fsync
+    ## instead of N, so admin cleanup of a burst is fast instead of grinding the single writer.
+    ## Returns each deleted paste's id + blob_id ("" when inline) so the caller can drop the
+    ## backing blobs and evict the in-memory cache, mirroring deletePasteRow's split of concerns.
+    if n <= 0: return
+    withLock gWriteLock:
+        let rows = conn().getAllRows(sql"""
+            SELECT id, blob_id FROM pastes ORDER BY created_at DESC LIMIT ?;
+        """, $n)
+        if rows.len == 0: return
+        # DELETE re-runs the same ordered subquery; holding gWriteLock across both means no insert
+        # can slip in between, so it removes exactly the rows just selected.
+        conn().exec(sql"""
+            DELETE FROM pastes WHERE id IN (
+                SELECT id FROM pastes ORDER BY created_at DESC LIMIT ?);
+        """, $n)
+        for r in rows:
+            result.add (id: r[0], blobId: BlobId(r[1]))
+
 proc insertFile*(f: StoredFile, ownerIp: string) =
     ## Persist a file metadata row (the blob itself is written separately by the blob store).
     withLock gWriteLock:

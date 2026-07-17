@@ -15,8 +15,8 @@
 ## process-wide lock guards the state Table, which is shared across all worker threads under ORC.
 ##
 ## `requireAdmin` is a fail-closed upfront guard, not middleware: the check is a pure precondition
-## with no on-the-way-out work, so admin handlers call it as their first line — mirroring
-## ratelimit.rejectPasteLimit — rather than wrapping the request in the middleware chain.
+## with no on-the-way-out work, so admin handlers call it as their first line rather than wrapping
+## the request in the middleware chain.
 
 import std/[tables, locks, times]
 import ../routes

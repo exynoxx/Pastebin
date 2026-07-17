@@ -11,7 +11,8 @@
 ## (never evicted); only clean entries are LRU-evictable.
 
 import std/[locks, tables, options]
-import types, config, db, blobstore
+import types, config, blobstore
+from db import nil
 
 type
   CacheEntry = ref object
@@ -255,7 +256,7 @@ proc persistLoop() {.thread.} =
           let (bid, _) = saveFromString(e.fullContent)
           written = bid
           stored.blobId = bid
-        insertPaste(stored, e.ownerIp)
+        db.insertPaste(stored, e.ownerIp)
       except CatchableError:
         # Persist failed: drop the cached copy (paste lost — accepted) and clean any orphan blob.
         if written.len > 0: discard deleteBlob(written)
@@ -263,5 +264,5 @@ proc persistLoop() {.thread.} =
         continue
       if not markPersisted(id, written):
         # Entry deleted while we were writing -> roll back so we don't leave an orphan row/blob.
-        discard deletePasteRow(id)
+        discard db.deletePasteRow(id)
         if written.len > 0: discard deleteBlob(written)

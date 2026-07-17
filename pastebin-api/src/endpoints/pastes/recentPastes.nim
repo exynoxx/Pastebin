@@ -2,7 +2,8 @@
 
 import std/[json, strutils]
 import ../routes
-import ../../types, ../../db, ../../json
+from ../../db import nil
+import ../../types, ../../json
 
 serialize(PasteSummary)
 
@@ -21,7 +22,7 @@ proc handleRecentPastes*(ctx: Ctx) =
     # Clamp: parseInt("-1") succeeds without raising, and SQLite treats a negative LIMIT as
     # unbounded — so an unclamped ?limit=-1 would dump the entire pastes+files union.
     limit = max(1, min(limit, MaxLimit))
-    ctx.req.respond(200, summariesJson(selectRecentSummaries(limit)))
+    ctx.req.respond(200, summariesJson(db.selectRecentSummaries(limit)))
 
 func summariesJson(items: seq[PasteSummary]): string =
     ## Assemble the array from the macro-generated per-item node builder.

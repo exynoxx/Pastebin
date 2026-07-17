@@ -2,7 +2,8 @@
 
 import std/[json, options]
 import ../routes
-import ../../types, ../../db, ../../json, ../../pastecache
+from ../../db import nil
+import ../../types, ../../json, ../../pastecache
 
 serialize(Paste, omit = [blobId])
 
@@ -11,5 +12,5 @@ proc handleGetPaste*(ctx: Ctx, id: string) =
     if cached.isSome:
         ctx.req.respond(200, pasteJson(cached.get))
         return
-    let p = fetchOr404(ctx, selectPaste(id), "Paste not found")
+    let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
     ctx.req.respond(200, pasteJson(p))

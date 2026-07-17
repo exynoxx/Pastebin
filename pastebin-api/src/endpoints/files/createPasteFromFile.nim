@@ -3,7 +3,8 @@
 
 import std/[json, strutils, options]
 import ../routes
-import ../../types, ../../db, ../../apperrors, ../../ratelimit, ../../timeutil, ../../macros
+from ../../db import nil
+import ../../types, ../../apperrors, ../../ratelimit, ../../timeutil, ../../macros
 import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =
@@ -12,7 +13,7 @@ proc handleCreatePasteFromFile*(ctx: Ctx) =
     # Resolve the file BEFORE the paste rate-limit check: checkPasteCreate records into the burst
     # window / trips the penalty box, so a run of requests with a bad fileId must not consume that
     # budget (or penalty-box the IP) when no paste is ever created.
-    let f = fetchOr404(ctx, selectFile(fileId), "File not found")
+    let f = fetchOr404(ctx, db.selectFile(fileId), "File not found")
     returnif: ctx.rejectPasteLimit(checkPasteCreate(ctx.ip))
     let reqTitle = root{"title"}.getStr("")
     let title = if reqTitle.strip().len == 0: f.originalName else: reqTitle.strip()

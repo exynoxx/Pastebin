@@ -2,7 +2,8 @@
 
 import std/json
 import ../routes, guard
-import ../../types, ../../db, ../../json, ../../macros
+from ../../db import nil
+import ../../types, ../../json, ../../macros
 
 serialize(AdminContentRow)
 
@@ -10,7 +11,7 @@ func adminContentJson(rows: seq[AdminContentRow]): string
 
 proc handleAdminListPastes*(ctx: Ctx) =
     returnif: not ctx.requireAdmin()
-    ctx.req.respond(200, adminContentJson(selectAllContent()))
+    ctx.req.respond(200, adminContentJson(db.selectAllContent()))
 
 func adminContentJson(rows: seq[AdminContentRow]): string =
     ## Admin-only content list (fields no public builder emits: ownerIp, hasBlob).

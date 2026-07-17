@@ -6,7 +6,8 @@
 
 import std/[strutils, tables, strformat]
 import ../routes, ../../json
-import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
+from ../../db import nil
+import ../../types, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../ids, webframework/multipart
 import zippy/ziparchives
 
@@ -56,7 +57,7 @@ proc handleUploadFolder*(ctx: Ctx) =
             uploadedAt: nowMillis(),
             visibility: normalizeVisibility(visibility),
             blobId: blobId)
-        insertFile(f, ctx.ip)
+        db.insertFile(f, ctx.ip)
         notifyFileUploaded(f)
         ctx.req.respond(200, storedFileJson(f))
     except PayloadTooLargeError as e:

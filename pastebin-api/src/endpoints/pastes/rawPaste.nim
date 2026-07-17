@@ -4,7 +4,8 @@
 
 import std/options
 import ../routes
-import ../../types, ../../db, ../../blobstore, ../../pastecache
+from ../../db import nil
+import ../../types, ../../blobstore, ../../pastecache
 
 proc handleRawPaste*(ctx: Ctx, id: string) =
     let rv = acquireForRaw(id)
@@ -16,7 +17,7 @@ proc handleRawPaste*(ctx: Ctx, id: string) =
         else:
             ctx.req.respond(200, v.content, contentType = "text/plain; charset=utf-8")
         return
-    let p = fetchOr404(ctx, selectPaste(id), "Paste not found")
+    let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
     if p.blobId.len > 0 and blobExists(p.blobId):
         ctx.req.respondFile(blobPath(p.blobId), "text/plain; charset=utf-8",
             rangeHeader = ctx.req.header("Range"))

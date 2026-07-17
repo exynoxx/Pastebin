@@ -6,7 +6,8 @@
 
 import std/[json, strutils, unicode, strformat]
 import ../routes
-import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
+from ../../db import nil
+import ../../types, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids, ../../pastecache, ../../macros
 
 func deriveTitle(content: string, maxChars: int): string
@@ -52,7 +53,7 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
         p.blobId = blobId
         p.size = size
     try:
-        insertPaste(p, ownerIp)
+        db.insertPaste(p, ownerIp)
     except CatchableError:
         if p.blobId.len > 0: discard deleteBlob(p.blobId)
         raise

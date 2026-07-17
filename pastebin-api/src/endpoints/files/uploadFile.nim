@@ -2,7 +2,8 @@
 
 import std/[options, strformat]
 import ../routes, ../../json
-import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
+from ../../db import nil
+import ../../types, ../../blobstore, ../../quota, ../../ntfy,
        ../../timeutil, ../../apperrors, ../../ids, webframework/multipart
 
 proc handleUploadFile*(ctx: Ctx) =
@@ -40,7 +41,7 @@ proc handleUploadFile*(ctx: Ctx) =
             uploadedAt: nowMillis(),
             visibility: normalizeVisibility(visibility),
             blobId: blobId)
-        insertFile(f, ctx.ip)
+        db.insertFile(f, ctx.ip)
         notifyFileUploaded(f)
         ctx.req.respond(200, storedFileJson(f))
     except PayloadTooLargeError as e:

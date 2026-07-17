@@ -4,7 +4,8 @@
 
 import std/[options, strutils]
 import ../routes
-import ../../types, ../../db, ../../blobstore
+from ../../db import nil
+import ../../types, ../../blobstore
 
 func contentDispositionAttachment*(name: string): string =
     ## Build a safe `Content-Disposition: attachment` header value for a user-supplied filename.
@@ -32,7 +33,7 @@ func contentDispositionAttachment*(name: string): string =
 
 proc resolveDownload*(fileId: string): Option[DownloadData] =
     ## Resolve a file id to its on-disk blob, or none if the file/blob is missing.
-    let fo = selectFile(fileId)
+    let fo = db.selectFile(fileId)
     if fo.isNone: return none(DownloadData)
     let f = fo.get
     if f.blobId.len == 0 or not blobExists(f.blobId): return none(DownloadData)

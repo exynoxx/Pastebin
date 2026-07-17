@@ -2,8 +2,8 @@
 
 import std/options
 import ../routes, ../../json
-import ../../db
+from ../../db import nil
 
 proc handleGetFile*(ctx: Ctx, id: string) =
-    let f = fetchOr404(ctx, selectFile(id), "File not found")
+    let f = fetchOr404(ctx, db.selectFile(id), "File not found")
     ctx.req.respond(200, storedFileJson(f))

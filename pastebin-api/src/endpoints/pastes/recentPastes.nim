@@ -2,7 +2,7 @@
 
 import std/[json, strutils]
 import ../routes
-from ../../db import nil
+importuse db
 import ../../types, ../../json
 
 serialize(PasteSummary)

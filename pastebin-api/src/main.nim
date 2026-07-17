@@ -3,21 +3,28 @@
 ## owns the HTTP server + per-request glue. Listens on port 8080 behind nginx.
 
 import std/strformat
-import config, blobstore, ratelimit, ntfy, clientip, accesslog, pastecache
-from db import nil
+import config
+import common/controlflow
+importuse blobstore
+importuse ratelimit
+importuse ntfy
+importuse clientip
+importuse accesslog
+importuse pastecache
+importuse db
 import webframework/server
 import endpoints/routes, endpoints/admin/guard
 
 proc main() =
-    let cfg = loadConfig()
+    let cfg = config.loadConfig()
 
     db.initDb(cfg.sqlitePath)
-    initBlobStore(cfg.blobStoragePath)
-    initPasteCache(cfg)
+    blobstore.initBlobStore(cfg.blobStoragePath)
+    pastecache.initPasteCache(cfg)
     initAdminGuard()
-    initRateLimiter(cfg)
-    initAccessLog(cfg)
-    initNtfy(cfg)
+    ratelimit.initRateLimiter(cfg)
+    accesslog.initAccessLog(cfg)
+    ntfy.initNtfy(cfg)
 
     stdout.writeLine(&"pastebin-api (nim) listening on 0.0.0.0:{cfg.port}" &
         &"  db={cfg.sqlitePath}  blobs={cfg.blobStoragePath}" &
@@ -30,7 +37,7 @@ proc main() =
         bodySpillThreshold: cfg.inlinePasteMaxBytes,
         maxBodyBytes: cfg.maxRequestBytes,
         networkLog: cfg.networkLog)
-    serve(registerRoutes(), cfg, serverCfg, resolveIp = resolveClientIp)
+    serve(registerRoutes(), cfg, serverCfg, resolveIp = clientip.resolveClientIp)
 
 when isMainModule:
     main()

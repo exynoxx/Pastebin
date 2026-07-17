@@ -8,7 +8,9 @@
 import webframework/server
 import webframework/context as fctx
 import common/controlflow
-import ../config, ../ratelimit, ../accesslog
+import ../config
+importuse ratelimit
+importuse accesslog
 
 # Re-export what handlers reach for through this module — httpserver (Request + response helpers),
 # config (AppConfig), the framework's Ctx-level helpers, and the shared control-flow templates
@@ -32,8 +34,8 @@ import
     admin/listPastes, admin/deletePaste
 
 func registerRoutes*(): RouteTable[AppConfig] =
-    result.use(accessLog())   # outermost: records every access, even those rate-limited (503) or 404
-    result.use(rateLimit())
+    result.use(accesslog.accessLog())   # outermost: records every access, even those rate-limited (503) or 404
+    result.use(ratelimit.rateLimit())
     result.get(   "/api/pastes",                       handleRecentPastes)
     result.post(  "/api/pastes",                       handleCreatePaste)
     result.get(   "/api/pastes/{id}",                  handleGetPaste)

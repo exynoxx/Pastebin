@@ -6,9 +6,15 @@
 
 import std/[json, strutils, unicode, strformat]
 import ../routes
-from ../../db import nil
-import ../../types, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids, ../../pastecache
+import ../../types, ../../apperrors
+importuse db
+importuse blobstore
+importuse quota
+importuse ntfy
+importuse timeutil
+importuse ratelimit
+importuse ids
+importuse pastecache
 
 func deriveTitle(content: string, maxChars: int): string
 func buildPreview(content: string, previewChars: int): string
@@ -17,21 +23,21 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
     ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) on oversize/over-quota.
     ## Fast path: keep full content in RAM and return immediately; a background thread persists it.
     ## Fallback (cache disabled or over budget): persist the blob + DB row before returning.
-    let id = newId()
+    let id = ids.newId()
     let ttl = if title.strip().len == 0: deriveTitle(content, cfg.untitledTitleMaxChars)
               else: title.strip()
     let byteCount = content.len.int64   # Nim strings are bytes => UTF-8 byte count
-    let visibility = normalizeVisibility(visibilityIn)
+    let visibility = types.normalizeVisibility(visibilityIn)
 
     if byteCount > cfg.maxPasteBytes:
         raise newException(PayloadTooLargeError,
             &"Paste size exceeds the maximum allowed size of {cfg.maxPasteBytes div (1024*1024)}MB")
 
-    ensureWithinQuota(ownerIp, byteCount, cfg.maxStorageBytesPerIp)
+    quota.ensureWithinQuota(ownerIp, byteCount, cfg.maxStorageBytesPerIp)
 
     # Build the display/stored shape. For large pastes the blob is written later (by the persister on
     # the fast path, or below on the fallback path), so blobId stays "" here.
-    var p = Paste(id: id, title: ttl, size: byteCount, visibility: visibility, createdAt: nowMillis())
+    var p = Paste(id: id, title: ttl, size: byteCount, visibility: visibility, createdAt: timeutil.nowMillis())
     if byteCount <= cfg.inlinePasteMaxBytes:
         p.content = content
         p.isTruncated = false
@@ -42,22 +48,22 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
         p.blobId = BlobId("")
 
     # Fast path: admit full content to the cache and return now.
-    if tryAdmit(p, content, ownerIp):
-        notifyPasteCreated(p)
+    if pastecache.tryAdmit(p, content, ownerIp):
+        ntfy.notifyPasteCreated(p)
         return p
 
     # Fallback: persist synchronously before returning (blob first for large pastes, DB row last, with
     # blob-cleanup-on-insert-failure so a failed create can't orphan a blob on disk).
     if p.isTruncated:
-        let (blobId, size) = saveFromString(content)
+        let (blobId, size) = blobstore.saveFromString(content)
         p.blobId = blobId
         p.size = size
     try:
         db.insertPaste(p, ownerIp)
     except CatchableError:
-        if p.blobId.len > 0: discard deleteBlob(p.blobId)
+        if p.blobId.len > 0: discard blobstore.deleteBlob(p.blobId)
         raise
-    notifyPasteCreated(p)
+    ntfy.notifyPasteCreated(p)
     p
 
 proc handleCreatePaste*(ctx: Ctx) =
@@ -76,7 +82,7 @@ proc handleCreatePaste*(ctx: Ctx) =
     if content.strip().len == 0:
         ctx.respondError(400, "Content cannot be empty")
         return
-    returnif: ctx.rejectPasteLimit(checkPasteCreate(ctx.ip))
+    returnif: ratelimit.rejectPasteLimit(ctx, ratelimit.checkPasteCreate(ctx.ip))
     let title = root{"title"}.getStr("")
     let visibility = root{"visibility"}.getStr("public")
     try:

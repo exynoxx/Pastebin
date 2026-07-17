@@ -2,13 +2,14 @@
 
 import std/[json, options]
 import ../routes
-from ../../db import nil
-import ../../types, ../../json, ../../pastecache
+importuse db
+importuse pastecache
+import ../../types, ../../json
 
 serialize(Paste, omit = [blobId])
 
 proc handleGetPaste*(ctx: Ctx, id: string) =
-    let cached = getDisplayPaste(id)
+    let cached = pastecache.getDisplayPaste(id)
     if cached.isSome:
         ctx.req.respond(200, pasteJson(cached.get))
         return

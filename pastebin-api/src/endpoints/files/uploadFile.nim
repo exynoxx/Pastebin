@@ -2,9 +2,13 @@
 
 import std/[options, strformat]
 import ../routes, ../../json
-from ../../db import nil
-import ../../types, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ids, webframework/multipart
+import ../../types, ../../apperrors, webframework/multipart
+importuse db
+importuse blobstore
+importuse quota
+importuse ntfy
+importuse timeutil
+importuse ids
 
 proc handleUploadFile*(ctx: Ctx) =
     var entries: seq[MultipartEntry]
@@ -30,19 +34,19 @@ proc handleUploadFile*(ctx: Ctx) =
         if entry.size > ctx.cfg.maxFileUploadBytes:
             raise newException(PayloadTooLargeError,
                 &"File size exceeds the maximum allowed size of {ctx.cfg.maxFileUploadBytes div (1024*1024)}MB")
-        ensureWithinQuota(ctx.ip, entry.size, ctx.cfg.maxStorageBytesPerIp)
+        quota.ensureWithinQuota(ctx.ip, entry.size, ctx.cfg.maxStorageBytesPerIp)
         # Stream the spilled request-body part straight into a blob (flat memory).
-        let (blobId, size) = saveFromFile(entry.dataFilePath)
+        let (blobId, size) = blobstore.saveFromFile(entry.dataFilePath)
         let f = StoredFile(
-            id: newId(),
+            id: ids.newId(),
             originalName: entry.filename,
             contentType: (if entry.contentType.len == 0: "application/octet-stream" else: entry.contentType),
             size: size,
-            uploadedAt: nowMillis(),
-            visibility: normalizeVisibility(visibility),
+            uploadedAt: timeutil.nowMillis(),
+            visibility: types.normalizeVisibility(visibility),
             blobId: blobId)
         db.insertFile(f, ctx.ip)
-        notifyFileUploaded(f)
+        ntfy.notifyFileUploaded(f)
         ctx.req.respond(200, storedFileJson(f))
     except PayloadTooLargeError as e:
         ctx.respondError(413, e.msg)

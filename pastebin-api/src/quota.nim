@@ -4,14 +4,16 @@
 ## race window is acceptable for a personal instance.
 
 import std/strformat
-import apperrors, pastecache
-from db import nil
+import apperrors
+import common/controlflow
+importuse pastecache
+importuse db
 
 proc ensureWithinQuota*(ownerIp: string, newSize, maxStorageBytesPerIp: int64) =
     ## Raises PayloadTooLargeError (-> 413) when newSize would push the IP over its budget.
     ## Counts not-yet-persisted (in-cache) bytes too, so a burst can't slip past the cap while its
     ## rows aren't in the DB yet.
-    let usage = db.sumUsageForOwner(ownerIp) + pendingBytesForOwner(ownerIp)
+    let usage = db.sumUsageForOwner(ownerIp) + pastecache.pendingBytesForOwner(ownerIp)
     if usage + newSize > maxStorageBytesPerIp:
         let quotaMb = maxStorageBytesPerIp div (1024 * 1024)
         raise newException(PayloadTooLargeError,

@@ -20,6 +20,14 @@ template returnif*(cond: bool) =
     ## call sites: `returnif: <cond>`.
     if cond: return
 
+template importuse*(m: untyped) =
+    ## Import module `m` for qualified-only access: `importuse blobstore` expands to
+    ## `from blobstore import nil`, so callers must write `blobstore.foo(...)` and can't shadow the
+    ## origin with a bare `foo(...)`. Named `importuse` (not `use`) because `use` collides with
+    ## `routetable.use`, and `using` is a reserved keyword. Relies on `--path:"src"` (nim.cfg) so a
+    ## bare module name resolves from nested endpoint files.
+    from m import nil
+
 template fetchOr404*(ctx, opt, msg: untyped): untyped =
     ## Yield the value inside an `Option`, or respond 404 with `msg` and return from the handler.
     ## `isNone`/`get` also resolve at the call site (every handler using this imports std/options).

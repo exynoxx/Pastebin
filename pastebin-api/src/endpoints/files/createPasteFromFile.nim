@@ -3,8 +3,10 @@
 
 import std/[json, strutils, options]
 import ../routes
-from ../../db import nil
-import ../../types, ../../apperrors, ../../ratelimit, ../../timeutil
+import ../../types, ../../apperrors
+importuse db
+importuse ratelimit
+importuse timeutil
 import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =
@@ -14,13 +16,13 @@ proc handleCreatePasteFromFile*(ctx: Ctx) =
     # window / trips the penalty box, so a run of requests with a bad fileId must not consume that
     # budget (or penalty-box the IP) when no paste is ever created.
     let f = fetchOr404(ctx, db.selectFile(fileId), "File not found")
-    returnif: ctx.rejectPasteLimit(checkPasteCreate(ctx.ip))
+    returnif: ratelimit.rejectPasteLimit(ctx, ratelimit.checkPasteCreate(ctx.ip))
     let reqTitle = root{"title"}.getStr("")
     let title = if reqTitle.strip().len == 0: f.originalName else: reqTitle.strip()
     let visibility = root{"visibility"}.getStr("public")
     let content =
         "[FILE ATTACHMENT]\nFile: " & f.originalName & "\nSize: " & $f.size & " bytes\n" &
-        "Type: " & f.contentType & "\nUploaded: " & formatMillisUtc(f.uploadedAt) & "\n\n" &
+        "Type: " & f.contentType & "\nUploaded: " & timeutil.formatMillisUtc(f.uploadedAt) & "\n\n" &
         "File ID: " & f.id & "\nDownload: /api/files/" & f.id & "/download"
     try:
         let p = createPasteRecord(ctx.cfg, title, content, visibility, ctx.ip)

@@ -135,7 +135,7 @@ proc selectPaste*(id: string): Option[Paste] =
         isTruncated: int64OrZero(r[4]) != 0,
         createdAt: int64OrZero(r[5]),
         blobId: BlobId(r[6]),
-        visibility: normalizeVisibility(r[7]))
+        visibility: types.normalizeVisibility(r[7]))
     some(paste)
 
 proc selectRecentSummaries*(limit: int): seq[PasteSummary] =
@@ -174,7 +174,7 @@ proc selectAllContent*(): seq[AdminContentRow] =
             isTruncated: int64OrZero(r[5]) != 0,
             hasBlob: r[6].len > 0,   # blob_id NULL/"" => inline
             createdAt: int64OrZero(r[7]),
-            visibility: normalizeVisibility(r[8]),
+            visibility: types.normalizeVisibility(r[8]),
             ownerIp: r[9])
 
 proc deletePasteRow*(id: string): bool =
@@ -202,7 +202,7 @@ proc selectFile*(id: string): Option[StoredFile] =
     let stored = StoredFile(
         id: r[0], originalName: r[1], contentType: r[2],
         size: int64OrZero(r[3]),
-        uploadedAt: int64OrZero(r[4]), blobId: BlobId(r[5]), visibility: normalizeVisibility(r[6]))
+        uploadedAt: int64OrZero(r[4]), blobId: BlobId(r[5]), visibility: types.normalizeVisibility(r[6]))
     some(stored)
 
 proc deleteFileRow*(id: string): bool =

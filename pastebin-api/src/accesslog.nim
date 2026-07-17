@@ -22,8 +22,9 @@
 ## flusher thread, so a single process-wide lock guards every access (mirrors ratelimit.nim's gLock).
 
 import std/[os, locks, strutils, monotimes, times]
-import config, timeutil
+import config
 import common/controlflow
+importuse timeutil
 import webframework/[context, middleware]
 
 var
@@ -71,7 +72,7 @@ func accessLog*(): Middleware[AppConfig] =
             if not gEnabled:
                 next()
                 return
-            let ts = formatMillisUtc(nowMillis())   # arrival time, before the chain runs
+            let ts = timeutil.formatMillisUtc(timeutil.nowMillis())   # arrival time, before the chain runs
             let started = getMonoTime()             # monotonic: elapsed is immune to clock changes
             try:
                 next()

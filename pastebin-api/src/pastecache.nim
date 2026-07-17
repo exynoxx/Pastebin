@@ -11,9 +11,10 @@
 ## (never evicted); only clean entries are LRU-evictable.
 
 import std/[locks, tables, options]
-import types, config, blobstore
+import types, config
 import common/controlflow
-from db import nil
+importuse blobstore
+importuse db
 
 type
   CacheEntry = ref object
@@ -254,16 +255,16 @@ proc persistLoop() {.thread.} =
         blobId: BlobId(""))
       try:
         if e.isTruncated:
-          let (bid, _) = saveFromString(e.fullContent)
+          let (bid, _) = blobstore.saveFromString(e.fullContent)
           written = bid
           stored.blobId = bid
         db.insertPaste(stored, e.ownerIp)
       except CatchableError:
         # Persist failed: drop the cached copy (paste lost — accepted) and clean any orphan blob.
-        if written.len > 0: discard deleteBlob(written)
+        if written.len > 0: discard blobstore.deleteBlob(written)
         discard removeFromCache(id)
         continue
       if not markPersisted(id, written):
         # Entry deleted while we were writing -> roll back so we don't leave an orphan row/blob.
         discard db.deletePasteRow(id)
-        if written.len > 0: discard deleteBlob(written)
+        if written.len > 0: discard blobstore.deleteBlob(written)

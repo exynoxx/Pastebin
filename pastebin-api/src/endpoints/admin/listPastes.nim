@@ -2,8 +2,8 @@
 
 import std/json
 import ../routes, guard
-from ../../db import nil
 import ../../types, ../../json
+importuse db
 
 serialize(AdminContentRow)
 

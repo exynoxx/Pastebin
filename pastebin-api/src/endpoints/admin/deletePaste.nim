@@ -5,20 +5,22 @@
 
 import std/[json, options]
 import ../routes, guard
-from ../../db import nil
-import ../../types, ../../blobstore, ../../pastecache
+import ../../types
+importuse db
+importuse blobstore
+importuse pastecache
 
 proc handleAdminDeletePaste*(ctx: Ctx, id: string) =
     returnif: not ctx.requireAdmin()
-    let cached = removeFromCache(id)
+    let cached = pastecache.removeFromCache(id)
     if cached.wasCached:
-        if cached.blobId.len > 0: discard deleteBlob(cached.blobId)
+        if cached.blobId.len > 0: discard blobstore.deleteBlob(cached.blobId)
         discard db.deletePasteRow(id)   # no-op if it was never persisted
         ctx.req.respond(200, $(%*{"message": "Paste deleted successfully"}))
         return
     let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
     if p.blobId.len > 0:
-        discard deleteBlob(p.blobId)
+        discard blobstore.deleteBlob(p.blobId)
     if db.deletePasteRow(id):
         ctx.req.respond(200, $(%*{"message": "Paste deleted successfully"}))
     else:

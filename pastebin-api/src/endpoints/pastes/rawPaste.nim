@@ -4,22 +4,24 @@
 
 import std/options
 import ../routes
-from ../../db import nil
-import ../../types, ../../blobstore, ../../pastecache
+importuse db
+importuse blobstore
+importuse pastecache
+import ../../types
 
 proc handleRawPaste*(ctx: Ctx, id: string) =
-    let rv = acquireForRaw(id)
+    let rv = pastecache.acquireForRaw(id)
     if rv.isSome:
         let v = rv.get
-        if (not v.dirty) and v.blobId.len > 0 and blobExists(v.blobId):
-            ctx.req.respondFile(blobPath(v.blobId), "text/plain; charset=utf-8",
+        if (not v.dirty) and v.blobId.len > 0 and blobstore.blobExists(v.blobId):
+            ctx.req.respondFile(blobstore.blobPath(v.blobId), "text/plain; charset=utf-8",
                 rangeHeader = ctx.req.header("Range"))
         else:
-            ctx.req.respond(200, v.content, contentType = "text/plain; charset=utf-8")
+            ctx.req.respond(200, pastecache.content(v), contentType = "text/plain; charset=utf-8")
         return
     let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
-    if p.blobId.len > 0 and blobExists(p.blobId):
-        ctx.req.respondFile(blobPath(p.blobId), "text/plain; charset=utf-8",
+    if p.blobId.len > 0 and blobstore.blobExists(p.blobId):
+        ctx.req.respondFile(blobstore.blobPath(p.blobId), "text/plain; charset=utf-8",
             rangeHeader = ctx.req.header("Range"))
     else:
         ctx.req.respond(200, p.content, contentType = "text/plain; charset=utf-8")

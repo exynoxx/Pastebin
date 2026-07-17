@@ -6,9 +6,13 @@
 
 import std/[strutils, tables, strformat]
 import ../routes, ../../json
-from ../../db import nil
-import ../../types, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ids, webframework/multipart
+import ../../types, ../../apperrors, webframework/multipart
+importuse db
+importuse blobstore
+importuse quota
+importuse ntfy
+importuse timeutil
+importuse ids
 import zippy/ziparchives
 
 func zipEntryName(entry: MultipartEntry): string
@@ -43,22 +47,22 @@ proc handleUploadFolder*(ctx: Ctx) =
         if uncompressedTotal > ctx.cfg.maxFileUploadBytes:
             raise newException(PayloadTooLargeError,
                 &"Folder size exceeds the maximum allowed size of {ctx.cfg.maxFileUploadBytes div (1024*1024)}MB")
-        ensureWithinQuota(ctx.ip, uncompressedTotal, ctx.cfg.maxStorageBytesPerIp)
+        quota.ensureWithinQuota(ctx.ip, uncompressedTotal, ctx.cfg.maxStorageBytesPerIp)
         var zipEntries: OrderedTable[string, string]
         for e in fileParts:
             zipEntries[zipEntryName(e)] = readFile(e.dataFilePath)
         let zipBytes = createZipArchive(zipEntries)
-        let (blobId, size) = saveFromString(zipBytes)
+        let (blobId, size) = blobstore.saveFromString(zipBytes)
         let f = StoredFile(
-            id: newId(),
+            id: ids.newId(),
             originalName: zipFileName(folderName),
             contentType: "application/zip",
             size: size,
-            uploadedAt: nowMillis(),
-            visibility: normalizeVisibility(visibility),
+            uploadedAt: timeutil.nowMillis(),
+            visibility: types.normalizeVisibility(visibility),
             blobId: blobId)
         db.insertFile(f, ctx.ip)
-        notifyFileUploaded(f)
+        ntfy.notifyFileUploaded(f)
         ctx.req.respond(200, storedFileJson(f))
     except PayloadTooLargeError as e:
         ctx.respondError(413, e.msg)

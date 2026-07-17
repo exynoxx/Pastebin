@@ -32,7 +32,7 @@ services:
     environment:
       # Binds 8080 by default; set PORT to override.
       # Worker pool: keep well under cores*10 to stay in the 250 MB cap on the Pi 3B.
-      - WORKER_THREADS=${WORKER_THREADS:-8}
+      - WORKER_THREADS=${WORKER_THREADS:-6}
       - SQLITE_PATH=/data/db/pastebin.db
       - BLOB_STORAGE_PATH=/data/blobs
       - ACCESS_LOG_PATH=/data/logs/access.log

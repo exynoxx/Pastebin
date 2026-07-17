@@ -11,7 +11,8 @@
 ## (never evicted); only clean entries are LRU-evictable.
 
 import std/[locks, tables, options]
-import types, config, blobstore, macros
+import types, config, blobstore
+import common/controlflow
 from db import nil
 
 type

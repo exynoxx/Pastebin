@@ -40,16 +40,8 @@ proc respond*[E](ctx: Ctx[E], statusCode: int, body: string,
     ctx.req.respond(statusCode, body, contentType, extraHeaders)
 
 # ---- handler control-flow templates ----------------------------------------
-# These early-`return` from the enclosing handler, so they must be templates, not procs.
-# `isNone`/`get` are resolved at the call site (every handler using fetchOr404 imports std/options).
-
-template fetchOr404*(ctx, opt, msg: untyped): untyped =
-    ## Yield the value inside an `Option`, or respond 404 with `msg` and return from the handler.
-    let optVal = opt
-    if optVal.isNone:
-        ctx.respondError(404, msg)
-        return
-    optVal.get
+# Early-`return`s from the enclosing handler, so it must be a template, not a proc. (The generic
+# fetchOr404 lives in the shared common/ project; this one is JSON-body specific, so it stays here.)
 
 template parseJsonBodyOr400*(ctx: untyped): JsonNode =
     ## Parse the request body as JSON, or respond 400 and return from the handler.

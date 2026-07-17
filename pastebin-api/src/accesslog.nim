@@ -22,7 +22,8 @@
 ## flusher thread, so a single process-wide lock guards every access (mirrors ratelimit.nim's gLock).
 
 import std/[os, locks, strutils, monotimes, times]
-import config, timeutil, macros
+import config, timeutil
+import common/controlflow
 import webframework/[context, middleware]
 
 var

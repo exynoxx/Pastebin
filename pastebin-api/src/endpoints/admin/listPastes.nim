@@ -3,7 +3,7 @@
 import std/json
 import ../routes, guard
 from ../../db import nil
-import ../../types, ../../json, ../../macros
+import ../../types, ../../json
 
 serialize(AdminContentRow)
 

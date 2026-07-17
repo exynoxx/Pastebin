@@ -4,7 +4,7 @@
 import std/[json, strutils, options]
 import ../routes
 from ../../db import nil
-import ../../types, ../../apperrors, ../../ratelimit, ../../timeutil, ../../macros
+import ../../types, ../../apperrors, ../../ratelimit, ../../timeutil
 import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =

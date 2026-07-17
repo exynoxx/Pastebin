@@ -16,7 +16,7 @@
 ## nginx re-uses upstream connections cheaply and the workload is tiny.
 
 import std/[net, os, strutils, uri, json]
-import macros
+import common/controlflow
 import tmpfile
 
 type

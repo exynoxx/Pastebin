@@ -6,7 +6,7 @@
 import std/[json, options]
 import ../routes, guard
 from ../../db import nil
-import ../../types, ../../blobstore, ../../pastecache, ../../macros
+import ../../types, ../../blobstore, ../../pastecache
 
 proc handleAdminDeletePaste*(ctx: Ctx, id: string) =
     returnif: not ctx.requireAdmin()

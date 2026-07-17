@@ -7,13 +7,16 @@
 
 import webframework/server
 import webframework/context as fctx
+import common/controlflow
 import ../config, ../ratelimit, ../accesslog
 
 # Re-export what handlers reach for through this module — httpserver (Request + response helpers),
-# config (AppConfig), and the framework's Ctx-level helpers. NOT the framework's generic `Ctx`: the
-# app-bound alias below owns that name, and re-exporting the generic one would make it ambiguous.
+# config (AppConfig), the framework's Ctx-level helpers, and the shared control-flow templates
+# (fetchOr404/returnif/swallowException). NOT the framework's generic `Ctx`: the app-bound alias below
+# owns that name, and re-exporting the generic one would make it ambiguous.
 export httpserver, config
-export fctx.errorJson, fctx.respondError, fctx.fetchOr404, fctx.parseJsonBodyOr400
+export fctx.errorJson, fctx.respondError, fctx.parseJsonBodyOr400
+export controlflow
 
 type
     Ctx* = fctx.Ctx[AppConfig]

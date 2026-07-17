@@ -29,7 +29,8 @@
 ## HTTP presentation together is why this module depends on the framework.
 
 import std/[tables, deques, locks, times, json, strutils]
-import config, macros
+import config
+import common/controlflow
 import webframework/[httpserver, context, middleware]
 
 const

@@ -4,7 +4,8 @@
 ## can never block or fail a request.
 
 import std/[httpclient, json, strutils, strformat]
-import config, types, macros
+import config, types
+import common/controlflow
 
 type NtfyMsg = object
     title, message, click: string
@@ -41,7 +42,7 @@ proc worker() {.thread.} =
         defer: client.close()
         while true:
             let msg = gChan.recv()
-            try:
+            swallowException: # swallow: ntfy must never affect the request path
                 let payload = %*{
                     "topic": gTopic,
                     "title": msg.title,
@@ -51,8 +52,6 @@ proc worker() {.thread.} =
                     "priority": 3,
                 }
                 discard client.request(gServer, HttpPost, body = $payload)
-            except CatchableError:
-                discard # swallow: ntfy must never affect the request path
 
 proc initNtfy*(cfg: AppConfig) =
     gServer = cfg.ntfyServerUrl.strip(leading = false, trailing = true, {'/'})

@@ -8,7 +8,7 @@ import std/[json, strutils, unicode, strformat]
 import ../routes
 from ../../db import nil
 import ../../types, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids, ../../pastecache, ../../macros
+       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids, ../../pastecache
 
 func deriveTitle(content: string, maxChars: int): string
 func buildPreview(content: string, previewChars: int): string

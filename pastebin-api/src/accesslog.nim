@@ -23,7 +23,7 @@
 
 import std/[os, locks, strutils, monotimes, times]
 import config
-import common/controlflow
+import common/templates
 importuse timeutil
 import webframework/[context, middleware]
 

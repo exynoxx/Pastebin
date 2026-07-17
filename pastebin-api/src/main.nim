@@ -4,7 +4,7 @@
 
 import std/strformat
 import config
-import common/controlflow
+import common/templates
 importuse blobstore
 importuse ratelimit
 importuse ntfy

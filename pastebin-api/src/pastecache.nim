@@ -12,7 +12,7 @@
 
 import std/[locks, tables, options]
 import types, config
-import common/controlflow
+import common/templates
 importuse blobstore
 importuse db
 

@@ -30,7 +30,7 @@
 
 import std/[tables, deques, locks, times, json, strutils]
 import config
-import common/controlflow
+import common/templates
 import webframework/[httpserver, context, middleware]
 
 const

@@ -16,7 +16,7 @@
 ## amount needed so a delimiter split across two `readBuffer` calls is still found.
 
 import std/[os, strutils, strformat]
-import common/controlflow
+import common/templates
 import tmpfile
 
 type

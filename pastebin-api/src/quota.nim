@@ -5,7 +5,7 @@
 
 import std/strformat
 import apperrors
-import common/controlflow
+import common/templates
 importuse pastecache
 importuse db
 

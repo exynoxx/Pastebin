@@ -14,7 +14,7 @@
 import std/[locks, os, strutils, options]
 import db_connector/db_sqlite
 import types
-import common/controlflow
+import common/templates
 
 var
     gDbPath: string

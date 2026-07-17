@@ -5,7 +5,7 @@
 
 import std/[httpclient, json, strutils, strformat]
 import config, types
-import common/controlflow
+import common/templates
 
 type NtfyMsg = object
     title, message, click: string

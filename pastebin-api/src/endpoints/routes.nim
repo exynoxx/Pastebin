@@ -7,7 +7,7 @@
 
 import webframework/server
 import webframework/context as fctx
-import common/controlflow
+import common/templates
 import ../config
 importuse ratelimit
 importuse accesslog
@@ -18,7 +18,7 @@ importuse accesslog
 # owns that name, and re-exporting the generic one would make it ambiguous.
 export httpserver, config
 export fctx.errorJson, fctx.respondError, fctx.parseJsonBodyOr400
-export controlflow
+export templates
 
 type
     Ctx* = fctx.Ctx[AppConfig]

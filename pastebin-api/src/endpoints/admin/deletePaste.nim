@@ -5,10 +5,10 @@
 
 import std/[json, options]
 import ../routes, guard
-import ../../types, ../../db, ../../blobstore, ../../pastecache
+import ../../types, ../../db, ../../blobstore, ../../pastecache, ../../macros
 
 proc handleAdminDeletePaste*(ctx: Ctx, id: string) =
-    if not ctx.requireAdmin(): return
+    returnif: not ctx.requireAdmin()
     let cached = removeFromCache(id)
     if cached.wasCached:
         if cached.blobId.len > 0: discard deleteBlob(cached.blobId)

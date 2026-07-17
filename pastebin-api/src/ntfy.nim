@@ -4,7 +4,7 @@
 ## can never block or fail a request.
 
 import std/[httpclient, json, strutils, strformat]
-import config, types
+import config, types, macros
 
 type NtfyMsg = object
     title, message, click: string
@@ -64,14 +64,14 @@ proc initNtfy*(cfg: AppConfig) =
         createThread(gThread, worker)
 
 proc notifyPasteCreated*(p: Paste) =
-    if not gEnabled: return
+    returnif: not gEnabled
     gChan.send(NtfyMsg(
         title: &"New paste: {p.title}",
         message: &"{formatSize(p.size)} · {p.id}",
         click: &"{gPublicBase}/paste/{p.id}"))
 
 proc notifyFileUploaded*(f: StoredFile) =
-    if not gEnabled: return
+    returnif: not gEnabled
     gChan.send(NtfyMsg(
         title: &"New upload: {f.originalName}",
         message: &"{formatSize(f.size)} · {f.id}",

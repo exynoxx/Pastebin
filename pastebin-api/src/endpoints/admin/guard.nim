@@ -19,7 +19,7 @@
 ## ratelimit.rejectPasteLimit — rather than wrapping the request in the middleware chain.
 
 import std/[tables, locks, times]
-import ../routes
+import ../routes, ../../macros
 
 const
     BaseCooldownSec* = 2        ## first failed attempt locks the IP for this long
@@ -46,7 +46,7 @@ proc initAdminGuard*() =
 
 proc sweep(nowSec: int64) =
     ## Drop entries whose cooldown expired and that have been idle a while. Caller holds gLock.
-    if nowSec - gLastSweep < MaxCooldownSec: return
+    returnif: nowSec - gLastSweep < MaxCooldownSec
     gLastSweep = nowSec
     var stale: seq[string]
     for ip, st in gFails:

@@ -29,7 +29,7 @@
 ## HTTP presentation together is why this module depends on the framework.
 
 import std/[tables, deques, locks, times, json, strutils]
-import config
+import config, macros
 import webframework/[httpserver, context, middleware]
 
 const
@@ -252,7 +252,7 @@ proc maybeSweep(nowSec: int64) =
     ## Drop idle per-IP entries so the table can't grow unbounded; runs at most once per window.
     ## Keeps an IP while its paste penalty is active OR it has been seen recently by either policy.
     ## Caller holds gLock.
-    if nowSec - gLastSweep < WindowSec: return
+    returnif: nowSec - gLastSweep < WindowSec
     gLastSweep = nowSec
     let idleCutoff = max(WindowSec * 2, max(gPasteWindowSeconds, gPastePenaltySeconds)).int64
     var stale: seq[string]

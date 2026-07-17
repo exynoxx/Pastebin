@@ -2,14 +2,14 @@
 
 import std/json
 import ../routes, guard
-import ../../types, ../../db, ../../json
+import ../../types, ../../db, ../../json, ../../macros
 
 serialize(AdminContentRow)
 
 func adminContentJson(rows: seq[AdminContentRow]): string
 
 proc handleAdminListPastes*(ctx: Ctx) =
-    if not ctx.requireAdmin(): return
+    returnif: not ctx.requireAdmin()
     ctx.req.respond(200, adminContentJson(selectAllContent()))
 
 func adminContentJson(rows: seq[AdminContentRow]): string =

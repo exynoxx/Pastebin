@@ -34,8 +34,10 @@ RUN apk add --no-cache curl xz && \
 COPY pastebin-api/pastebin.nimble pastebin-api/nim.cfg ./
 RUN nimble install -dy
 
-# The framework at /webframework satisfies nim.cfg's `--path:".."` (relative to this WORKDIR).
+# /webframework and /common satisfy nim.cfg's `--path:".."` (relative to this WORKDIR): the reused
+# framework and the shared common/ project (e.g. common/templates) both live at the repo root.
 COPY webframework /webframework
+COPY common /common
 COPY pastebin-api/src ./src
 
 # Map Docker's TARGETARCH -> (zig glibc target triple, nim cpu), wrap zig as a clang-compatible

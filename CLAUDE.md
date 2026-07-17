@@ -62,7 +62,7 @@ structure under `pastebin-api/src/`:
   `blobstore.nim` (blob store, 2-char sharding `ab/ab12…`, atomic temp→final writes, seekable/Range
   reads; `saveFromString` for inline-overflow, `saveFromFile` for uploads — paste content <256 KB
   stays inline in SQLite, larger → blob), `quota.nim` (per-IP cap `MAX_STORAGE_BYTES_PER_IP`,
-  100 MB; counts not-yet-persisted in-cache bytes too), `pastecache.nim` (in-memory LRU paste cache —
+  100 MB; usage summed from the DB only), `pastecache.nim` (in-memory LRU paste cache —
   see below), `ratelimit.nim` (per-IP sliding window + global sliding window + global concurrency cap),
   `ntfy.nim`, `timeutil.nim` (Unix epoch-millis timestamps + one-shot legacy-ISO migration),
   `ids.nim` (8-char base62 public IDs for pastes/files), `types.nim`, `apperrors.nim`.
@@ -120,16 +120,15 @@ is all driven by **`Taskfile.yml`** (`task --list` for the menu):
 Auth is hands-free: the Pi password lives in **`.taskenv`** (gitignored, `PI_PASS=<pi-password>`) and `ssh`/`scp`
 are `sshpass`-wrapped; leave `PI_PASS` empty to use an SSH key instead.
 
-**Deploying off-LAN (over Tailscale).** `.taskenv` pins `PI_IP` to the LAN address (`192.168.0.30`);
-when the workstation isn't on the Pi's LAN, deploy over the tailnet instead — the Pi is `rpi`
-(`100.120.214.111`) and its registry (`:5000`) + SSH (`:22`) are reachable there. Steps: (1) start
-`tailscaled` locally (`sudo systemctl start tailscaled` — needs the user's sudo password); (2) recreate
-the buildx builder to trust the **tailnet** registry (the builder's insecure-registry trust is pinned
-to one `host:port`, so the LAN builder won't push over tailnet): rebuild `pastebin-builder` with a
-config TOML for `100.120.214.111:5000` — same commands as `task setup`'s second step; (3) override the
-IP on every task call: `task PI_IP=100.120.214.111 build` then `task PI_IP=100.120.214.111 deploy`
-(also `ps`/`logs`). The Pi still pulls from its own `127.0.0.1:5000`, so nothing else changes. The data disk is located by
-filesystem **UUID** (`<data-uuid>`), not mount path, since OMV mounts it at `/srv/dev-disk-by-uuid-<uuid>`.
+**Deploy runs over the tailnet — the Pi is no longer on a fixed LAN, so always deploy via Tailscale.**
+`.taskenv` pins `PI_IP` to the Pi's **tailnet** address: the Pi is `rpi` (`100.120.214.111`), and its
+registry (`:5000`) + SSH (`:22`) are reachable there, so plain `task` (build + deploy) just works.
+Prerequisites: (1) `tailscaled` running locally (`sudo systemctl start tailscaled` — needs the user's
+sudo password); (2) the `pastebin-builder` buildx builder must trust the tailnet registry
+`100.120.214.111:5000` — its insecure-registry trust is pinned to one `host:port`, so (re)create it
+with a config TOML for that address (same as `task setup`'s builder step). The Pi still pulls from its
+own `127.0.0.1:5000`. The data disk is located by filesystem **UUID** (`<data-uuid>`), not mount path,
+since OMV mounts it at `/srv/dev-disk-by-uuid-<uuid>`.
 
 - **Build stages run natively, not emulated.** Both Dockerfiles pin their build stage to
   `FROM --platform=$BUILDPLATFORM …` (the workstation's amd64) and target arm64 only for the final

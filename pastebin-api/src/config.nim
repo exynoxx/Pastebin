@@ -18,19 +18,9 @@ type
 
         # --- paste memory cache ---
         cacheMaxBytes*: int64          # CACHE_MAX_BYTES  128 MB (dirty pending + clean LRU combined)
-        pasteCacheEnabled*: bool       # PASTE_CACHE      true (false => always persist synchronously)
 
-        # --- framework rate limits ---
-        perIpPerMinute*: int           # RATE_LIMIT_PER_IP_PER_MIN     120
-        uploadsPerMinute*: int         # RATE_LIMIT_UPLOADS_PER_MIN    10
-        globalConcurrency*: int        # RATE_LIMIT_GLOBAL_CONCURRENCY 50
-        globalPerMinute*: int          # RATE_LIMIT_GLOBAL_PER_MIN     600
-
-        # --- paste burst / penalty box ---
-        pasteBurstLimit*: int          # PASTE_BURST_LIMIT          10
-        pasteBurstWindowSec*: int      # PASTE_BURST_WINDOW_SEC     60
-        pastePenaltySec*: int          # PASTE_PENALTY_SEC          1800
-        pastePenaltyIntervalSec*: int  # PASTE_PENALTY_INTERVAL_SEC 60
+        # --- global concurrency limit (the only framework rate limiter) ---
+        globalConcurrency*: int        # RATE_LIMIT_GLOBAL_CONCURRENCY 30
 
         # --- ntfy ---
         ntfyServerUrl*: string         # NTFY_SERVER_URL   https://ntfy.sh
@@ -69,14 +59,7 @@ proc loadConfig*(): AppConfig =
     result.maxPasteBytes           = getLong("MAX_PASTE_BYTES", 10_485_760)
     result.maxStorageBytesPerIp    = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
     result.maxFileUploadBytes      = getLong("MAX_FILE_UPLOAD_BYTES", 52_428_800)   # 50 MB (single file & folder upload)
-    result.perIpPerMinute          = getLong("RATE_LIMIT_PER_IP_PER_MIN", 120).int
-    result.uploadsPerMinute        = getLong("RATE_LIMIT_UPLOADS_PER_MIN", 10).int
-    result.globalConcurrency       = getLong("RATE_LIMIT_GLOBAL_CONCURRENCY", 50).int
-    result.globalPerMinute         = getLong("RATE_LIMIT_GLOBAL_PER_MIN", 600).int
-    result.pasteBurstLimit         = getLong("PASTE_BURST_LIMIT", 10).int
-    result.pasteBurstWindowSec     = getLong("PASTE_BURST_WINDOW_SEC", 60).int
-    result.pastePenaltySec         = getLong("PASTE_PENALTY_SEC", 1800).int
-    result.pastePenaltyIntervalSec = getLong("PASTE_PENALTY_INTERVAL_SEC", 60).int
+    result.globalConcurrency       = getLong("RATE_LIMIT_GLOBAL_CONCURRENCY", 30).int
     result.ntfyServerUrl           = getEnv("NTFY_SERVER_URL", "https://ntfy.sh")
     result.ntfyTopic               = getEnv("NTFY_TOPIC", "")
     result.publicBaseUrl           = getEnv("PUBLIC_BASE_URL", "https://rpi.deer-hue.ts.net")
@@ -90,4 +73,3 @@ proc loadConfig*(): AppConfig =
     result.accessLogMaxBytes       = getLong("ACCESS_LOG_MAX_BYTES", 5_242_880)   # 5 MB
     result.accessLogFlushMs        = getLong("ACCESS_LOG_FLUSH_MS", 5_000).int    # 5 s
     result.cacheMaxBytes           = getLong("CACHE_MAX_BYTES", 134_217_728)   # 128 MB
-    result.pasteCacheEnabled       = getEnv("PASTE_CACHE", "true").toLowerAscii() != "false"

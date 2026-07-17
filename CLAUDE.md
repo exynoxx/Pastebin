@@ -50,8 +50,8 @@ timestamps instead of .NET `"o"` text, `""` instead of JSON `null` for empty `co
 IDs, `{"id"}`-only create responses). Edit the Nim tree to change runtime behavior. Onion
 structure under `pastebin-api/src/`:
 
-- `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults, incl. the 3-tier rate
-  limits and `uploads` policy. A couple of never-tuned limits (`pastePreviewChars`,
+- `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults, incl. the single global
+  concurrency cap (`RATE_LIMIT_GLOBAL_CONCURRENCY`). A couple of never-tuned limits (`pastePreviewChars`,
   `untitledTitleMaxChars`) are fixed constants, not env vars.
 - **`endpoints/routes.nim` — the route map** (verb → path → handler). Start here to find any
   endpoint. One handler per file under `endpoints/{pastes,files,admin}/`: createPaste,
@@ -63,7 +63,7 @@ structure under `pastebin-api/src/`:
   reads; `saveFromString` for inline-overflow, `saveFromFile` for uploads — paste content <256 KB
   stays inline in SQLite, larger → blob), `quota.nim` (per-IP cap `MAX_STORAGE_BYTES_PER_IP`,
   100 MB; counts not-yet-persisted in-cache bytes too), `pastecache.nim` (in-memory LRU paste cache —
-  see below), `ratelimit.nim` (per-IP sliding window + global sliding window + global concurrency cap),
+  see below), `ratelimit.nim` (a single global concurrency cap — 503 + `Retry-After` when exceeded),
   `ntfy.nim`, `timeutil.nim` (Unix epoch-millis timestamps + one-shot legacy-ISO migration),
   `ids.nim` (8-char base62 public IDs for pastes/files), `types.nim`, `apperrors.nim`.
 - **`pastecache.nim` — in-memory paste cache (write buffer + LRU read cache).** On create,
@@ -71,9 +71,10 @@ structure under `pastebin-api/src/`:
   background **persister thread** drains a `Channel` and writes the blob (large) + SQLite row, then
   flips the entry clean (it lives on as an LRU read-cache entry until evicted). `getPaste`/`rawPaste`
   serve from the cache first (rawPaste streams from disk once the entry is clean+blob-backed, so Range
-  keeps working); admin `deletePaste` evicts it. Over-budget or cache-disabled creates fall back to the
-  old synchronous persist-before-respond path. Size-bounded by **`CACHE_MAX_BYTES`** (128 MB, dirty
-  pending + clean LRU combined) and toggled by **`PASTE_CACHE`** (`true`/`false`). ⚠️ A paste lives
+  keeps working); admin `deletePaste` evicts it. The cache is mandatory (no toggle); when a create
+  can't be admitted because the cache is full (over `CACHE_MAX_BYTES`), the create is rejected with
+  **HTTP 429 + `Retry-After`** — there is no synchronous persist-before-respond fallback. Size-bounded
+  by **`CACHE_MAX_BYTES`** (128 MB, dirty pending + clean LRU combined). ⚠️ A paste lives
   only in RAM between the POST response and the flush (sub-second, steady state), so a hard crash in
   that window loses it — same accepted trade-off as the access log. The `recent` list stays DB-only, so
   a brand-new public paste appears there a few seconds late. Concurrency mirrors `accesslog.nim`: one

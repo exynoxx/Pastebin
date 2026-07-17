@@ -11,7 +11,7 @@
 ## (never evicted); only clean entries are LRU-evictable.
 
 import std/[locks, tables, options]
-import types, config, blobstore
+import types, config, blobstore, macros
 from db import nil
 
 type
@@ -76,7 +76,7 @@ proc initPasteCache*(cfg: AppConfig) =
   clearEntries()
   gTable = initTable[string, CacheEntry]()
   gPendingByIp = initTable[string, int64]()
-  if not gEnabled: return
+  returnif: not gEnabled
   gQueue.open()
   gPersisterStarted = true
   createThread(gPersister, persistLoop)
@@ -195,7 +195,7 @@ proc pushFront(e: CacheEntry) =
   if gTail == nil: gTail = e
 
 proc touch(e: CacheEntry) =
-  if gHead == e: return
+  returnif: gHead == e
   unlink(e)
   pushFront(e)
 

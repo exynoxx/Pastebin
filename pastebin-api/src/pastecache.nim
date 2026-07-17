@@ -1,14 +1,11 @@
-## In-memory paste cache: a size-bounded LRU that serves reads and buffers not-yet-persisted
-## writes. Newly created pastes are admitted here (full content in RAM) and their id returned
-## immediately; a background persister thread (see Task 3 / initPasteCache) drains the write queue
-## to db.nim + blobstore.nim. After a paste is persisted its entry stays as a clean LRU read-cache
-## entry until evicted. When a paste would not fit the budget, tryAdmit returns false and the caller
-## persists synchronously instead.
+## In-memory paste cache: a size-bounded LRU that serves reads and buffers not-yet-persisted writes.
+## admit() holds a new paste in RAM and returns its id at once; a background persister thread drains
+## it to db + blobstore, after which the entry lives on as a clean, evictable read-cache entry. When
+## a paste won't fit, admit() returns false and the caller persists synchronously. A paste is lost if
+## the box crashes between admit() and the flush (accepted, same as the access log).
 ##
-## Concurrency: one process-wide Lock guards the table, the intrusive LRU list, and all counters
-## (mirrors accesslog.nim / ratelimit.nim). Entry content is immutable after admit, so raw serving
-## can borrow it via a ref (CachedRawView) without copying under the lock. Dirty entries are pinned
-## (never evicted); only clean entries are LRU-evictable.
+## Concurrency: one process-wide Lock guards everything; Lru itself is not thread-safe. Entry content
+## is immutable after admit, so /raw can borrow it (CachedRawView) and read it without the lock.
 
 import std/[locks, tables, options]
 import types, config
@@ -21,96 +18,127 @@ type
     id, title, ownerIp: string
     size, createdAt: int64
     visibility: Visibility
-    isTruncated: bool            ## true => large paste; display uses previewContent
-    previewContent: string       ## display text for large pastes; "" for inline (use fullContent)
+    isTruncated: bool            ## large paste => display uses previewContent
+    previewContent: string       ## display text for large pastes ("" when inline)
     fullContent: string          ## full text (raw serving + persister)
-    blobId: BlobId                ## "" until the persister writes the blob (large pastes)
-    dirty: bool                  ## true => not yet on disk/DB; un-evictable
+    blobId: BlobId               ## "" until the persister writes the blob
+    dirty: bool                  ## not yet persisted; pinned (un-evictable)
     bytes: int64                 ## budget cost = fullContent.len
-    prev, next: CacheEntry       ## LRU links; gHead = MRU, gTail = LRU
+    prev, next: CacheEntry       ## LRU links; head = MRU, tail = LRU
 
   CachedRawView* = object
-    ## A borrowed handle for /raw: `entry` keeps the (immutable) content alive; dirty/blobId are
-    ## snapshotted under the lock so the caller never races the persister on those fields.
+    ## Borrowed /raw handle: `entry` keeps the immutable content alive; dirty/blobId are snapshotted.
     dirty*: bool
     blobId*: BlobId
     entry: CacheEntry
 
+# ---- Lru: size-bounded intrusive LRU + index --------------------------------
+# id -> entry index over a doubly-linked recency list, tracking resident bytes vs a budget.
+# Dirty entries are pinned. Not thread-safe: the module serializes every call under gLock.
+
+type
+  Lru = object
+    table: Table[string, CacheEntry]
+    head, tail: CacheEntry               ## MRU / LRU ends
+    bytes: int64                         ## total resident (dirty + clean)
+    maxBytes: int64
+
+proc unlink(lru: var Lru, e: CacheEntry) =
+  if e.prev != nil: e.prev.next = e.next else: lru.head = e.next
+  if e.next != nil: e.next.prev = e.prev else: lru.tail = e.prev
+  e.prev = nil
+  e.next = nil
+
+proc pushFront(lru: var Lru, e: CacheEntry) =
+  e.prev = nil
+  e.next = lru.head
+  if lru.head != nil: lru.head.prev = e
+  lru.head = e
+  if lru.tail == nil: lru.tail = e
+
+proc get(lru: Lru, id: string): CacheEntry =
+  ## Lookup, no LRU reorder. nil if absent.
+  if lru.table.hasKey(id): lru.table[id] else: nil
+
+proc touch(lru: var Lru, e: CacheEntry) =
+  ## Move to MRU (no-op if already there).
+  returnif: lru.head == e
+  lru.unlink(e)
+  lru.pushFront(e)
+
+proc admit(lru: var Lru, e: CacheEntry) =
+  lru.table[e.id] = e
+  lru.pushFront(e)
+  lru.bytes += e.bytes
+
+proc remove(lru: var Lru, e: CacheEntry) =
+  lru.unlink(e)
+  lru.table.del(e.id)
+  lru.bytes -= e.bytes
+
+proc fits(lru: Lru, cost: int64): bool =
+  lru.bytes + cost <= lru.maxBytes
+
+proc evictCleanToFit(lru: var Lru, cost: int64) =
+  ## Drop clean entries from the LRU end until `cost` fits; walks past pinned dirty ones.
+  var e = lru.tail
+  while e != nil and not lru.fits(cost):
+    let prev = e.prev
+    if not e.dirty: lru.remove(e)
+    e = prev
+
+proc reset(lru: var Lru, maxBytes: int64) =
+  ## Empty + rebudget. Unlink every node first so atomicArc (no cycle GC) can't leak the list.
+  var e = lru.head
+  while e != nil:
+    let nxt = e.next
+    e.prev = nil
+    e.next = nil
+    e = nxt
+  lru.head = nil
+  lru.tail = nil
+  lru.table = initTable[string, CacheEntry]()
+  lru.bytes = 0
+  lru.maxBytes = maxBytes
+
+# ---- module state -----------------------------------------------------------
+
 var
   gLock: Lock
-  gInited: bool
-  gEnabled: bool
-  gMaxBytes: int64
-  gBytes: int64                        ## total resident (dirty + clean)
-  gDirtyBytes: int64                   ## bytes pinned by not-yet-persisted entries
-  gTable: Table[string, CacheEntry]
-  gPendingByIp: Table[string, int64]
-  gHead, gTail: CacheEntry             ## MRU / LRU ends of the doubly-linked list
+  gLru: Lru
   gQueue: Channel[string]              ## ids awaiting background persistence
   gPersister: Thread[void]
-  gPersisterStarted: bool
 
-# Private helpers declared before use (public API reads first).
-proc unlink(e: CacheEntry)
-proc pushFront(e: CacheEntry)
-proc touch(e: CacheEntry)
-proc evictOne(e: CacheEntry)
-proc evictCleanToFit(cost: int64)
-proc addPending(ownerIp: string, delta: int64)
-proc clearEntries()
-proc persistLoop() {.thread.}
+initLock(gLock)                        ## process-wide lock + queue, init once at load
+gQueue.open()                          ## unbounded; drained by the persister when enabled
+
+# Private helpers, declared before use.
+func toPaste(e: CacheEntry): Paste
 proc snapshotForPersist(id: string): CacheEntry
+proc persistLoop() {.thread.}
 
-# ---- public API ------------------------------------------------------------
-
-proc cacheEnabled*(): bool = gEnabled
+# ---- public API -------------------------------------------------------------
+# Every proc assumes the cache is enabled + inited: callers check cfg.pasteCacheEnabled and skip the
+# cache when off. initPasteCache is the exception — it reads cfg to decide whether to start the persister.
 
 proc initPasteCache*(cfg: AppConfig) =
-  ## Production init: configure the singleton and start the background persister. When the cache is
-  ## disabled, tryAdmit short-circuits to false and every create persists synchronously.
-  if not gInited:
-    initLock(gLock)
-    gInited = true
-  gEnabled = cfg.pasteCacheEnabled
-  gMaxBytes = cfg.cacheMaxBytes
-  gBytes = 0
-  gDirtyBytes = 0
-  clearEntries()
-  gTable = initTable[string, CacheEntry]()
-  gPendingByIp = initTable[string, int64]()
-  returnif: not gEnabled
-  gQueue.open()
-  gPersisterStarted = true
+  ## Size the cache; start the persister only when enabled.
+  gLru.reset(cfg.cacheMaxBytes)
+  returnif: not cfg.pasteCacheEnabled
   createThread(gPersister, persistLoop)
 
 proc resetForTest*(maxBytes: int64) =
-  ## Test-only: (re)initialize the singleton — enabled, empty, given budget. No persister thread.
-  if not gInited:
-    initLock(gLock)
-    gInited = true
+  ## Test-only reset — empty, given budget, no persister.
   withLock gLock:
-    gEnabled = true
-    gMaxBytes = maxBytes
-    gBytes = 0
-    gDirtyBytes = 0
-    clearEntries()
-    gTable = initTable[string, CacheEntry]()
-    gPendingByIp = initTable[string, int64]()
+    gLru.reset(maxBytes)
 
-proc pendingBytesForOwner*(ownerIp: string): int64 =
-  if not gEnabled: return 0
-  withLock gLock:
-    result = gPendingByIp.getOrDefault(ownerIp, 0)
-
-proc tryAdmit*(display: Paste, fullContent, ownerIp: string): bool =
-  ## Admit a new paste to the cache as a dirty entry. Returns false (caller persists synchronously)
-  ## when the cache is disabled or the paste cannot fit even after evicting all clean entries.
-  if not gEnabled: return false
+proc admit*(display: Paste, fullContent, ownerIp: string): bool =
+  ## Admit a new paste as a dirty entry; false if it won't fit even after evicting all clean entries.
   let cost = fullContent.len.int64
   withLock gLock:
-    if cost > gMaxBytes: return false
-    evictCleanToFit(cost)
-    if gBytes + cost > gMaxBytes: return false   # only dirty bytes remain; cannot make room
+    if cost > gLru.maxBytes: return false
+    gLru.evictCleanToFit(cost)
+    if not gLru.fits(cost): return false   # only dirty bytes remain; can't make room
     let e = CacheEntry(
       id: display.id, title: display.title, ownerIp: ownerIp,
       size: display.size, createdAt: display.createdAt, visibility: display.visibility,
@@ -118,141 +146,70 @@ proc tryAdmit*(display: Paste, fullContent, ownerIp: string): bool =
       previewContent: (if display.isTruncated: display.content else: ""),
       fullContent: fullContent,
       blobId: BlobId(""), dirty: true, bytes: cost)
-    gTable[e.id] = e
-    pushFront(e)
-    gBytes += cost
-    gDirtyBytes += cost
-    addPending(ownerIp, cost)
-    if gPersisterStarted: gQueue.send(e.id)
+    gLru.admit(e)
+    gQueue.send(e.id)
     return true
 
 proc getDisplayPaste*(id: string): Option[Paste] =
-  ## Cache read for GET /api/pastes/{id}. Touches LRU. content = full (inline) or preview (large).
-  if not gEnabled: return none(Paste)
+  ## GET /api/pastes/{id}: metadata + inline/preview content. Touches LRU.
   withLock gLock:
-    if not gTable.hasKey(id): return none(Paste)
-    let e = gTable[id]
-    touch(e)
-    result = some(Paste(
-      id: e.id, title: e.title, size: e.size, createdAt: e.createdAt,
-      visibility: e.visibility, isTruncated: e.isTruncated, blobId: e.blobId,
-      content: (if e.isTruncated: e.previewContent else: e.fullContent)))
+    let e = gLru.get(id)
+    if e == nil: return none(Paste)
+    gLru.touch(e)
+    result = some(e.toPaste())
 
 proc acquireForRaw*(id: string): Option[CachedRawView] =
-  ## Cache read for GET /api/pastes/{id}/raw. Touches LRU; snapshots dirty/blobId under the lock and
-  ## returns a handle whose content the caller reads WITHOUT the lock (content is immutable).
-  if not gEnabled: return none(CachedRawView)
+  ## GET /{id}/raw: snapshot dirty/blobId under the lock; caller reads content lock-free (immutable).
   withLock gLock:
-    if not gTable.hasKey(id): return none(CachedRawView)
-    let e = gTable[id]
-    touch(e)
+    let e = gLru.get(id)
+    if e == nil: return none(CachedRawView)
+    gLru.touch(e)
     result = some(CachedRawView(dirty: e.dirty, blobId: e.blobId, entry: e))
 
 func content*(v: CachedRawView): lent string = v.entry.fullContent
 
 proc markPersisted*(id: string, blobId: BlobId): bool =
-  ## Called by the persister after a successful blob+DB write: flip dirty->clean, record blobId,
-  ## release the pending-bytes reservation. Returns false if the entry is gone (deleted mid-flight),
-  ## in which case the caller must roll back the row/blob it just wrote.
-  if not gEnabled: return false
+  ## Persister callback: flip dirty->clean, record blobId. false if the entry was deleted mid-flight
+  ## (caller then rolls back the row/blob it wrote).
   withLock gLock:
-    if not gTable.hasKey(id): return false
-    let e = gTable[id]
-    if e.dirty:
-      e.dirty = false
-      gDirtyBytes -= e.bytes
-      addPending(e.ownerIp, -e.bytes)
+    let e = gLru.get(id)
+    if e == nil: return false
+    e.dirty = false
     e.blobId = blobId
     return true
 
 proc removeFromCache*(id: string): tuple[wasCached: bool, blobId: BlobId] =
-  ## Evict an entry (admin delete). Returns whether it was cached and its blobId ("" if inline or
-  ## not-yet-flushed) so the caller can delete the on-disk blob if one exists.
-  if not gEnabled: return (false, BlobId(""))
+  ## Admin delete: evict + report blobId ("" if inline/unflushed) so the caller can delete the blob.
   withLock gLock:
-    if not gTable.hasKey(id): return (false, BlobId(""))
-    let e = gTable[id]
+    let e = gLru.get(id)
+    if e == nil: return (false, BlobId(""))
     let bid = e.blobId
-    if e.dirty:
-      gDirtyBytes -= e.bytes
-      addPending(e.ownerIp, -e.bytes)
-    unlink(e)
-    gTable.del(id)
-    gBytes -= e.bytes
+    gLru.remove(e)
     return (true, bid)
 
-# ---- private helpers -------------------------------------------------------
+# ---- private helpers --------------------------------------------------------
 
-proc unlink(e: CacheEntry) =
-  if e.prev != nil: e.prev.next = e.next else: gHead = e.next
-  if e.next != nil: e.next.prev = e.prev else: gTail = e.prev
-  e.prev = nil
-  e.next = nil
-
-proc pushFront(e: CacheEntry) =
-  e.prev = nil
-  e.next = gHead
-  if gHead != nil: gHead.prev = e
-  gHead = e
-  if gTail == nil: gTail = e
-
-proc touch(e: CacheEntry) =
-  returnif: gHead == e
-  unlink(e)
-  pushFront(e)
-
-proc evictOne(e: CacheEntry) =
-  unlink(e)
-  gTable.del(e.id)
-  gBytes -= e.bytes
-
-proc evictCleanToFit(cost: int64) =
-  ## Evict clean entries from the LRU end until this paste fits, or no clean entries remain.
-  ## Dirty entries are skipped (pinned) — so we may walk past them toward the head.
-  var e = gTail
-  while e != nil and gBytes + cost > gMaxBytes:
-    let prev = e.prev
-    if not e.dirty: evictOne(e)
-    e = prev
-
-proc addPending(ownerIp: string, delta: int64) =
-  let v = gPendingByIp.getOrDefault(ownerIp, 0) + delta
-  if v <= 0: gPendingByIp.del(ownerIp)
-  else: gPendingByIp[ownerIp] = v
-
-proc clearEntries() =
-  ## Unlink every node before dropping the list so the intrusive prev/next cycles break —
-  ## atomicArc has no cycle collector, so a bulk drop of a populated list would otherwise leak it.
-  var e = gHead
-  while e != nil:
-    let nxt = e.next
-    e.prev = nil
-    e.next = nil
-    e = nxt
-  gHead = nil
-  gTail = nil
+func toPaste(e: CacheEntry): Paste =
+  ## entry -> domain Paste; blobId "" while still dirty.
+  Paste(
+    id: e.id, title: e.title, size: e.size, createdAt: e.createdAt,
+    visibility: e.visibility, isTruncated: e.isTruncated, blobId: e.blobId,
+    content: (if e.isTruncated: e.previewContent else: e.fullContent))
 
 proc snapshotForPersist(id: string): CacheEntry =
-  ## Return the entry ref for persistence (fields read off it are immutable until we markPersisted),
-  ## or nil if it was deleted before we got to it. Dirty entries are un-evictable, so a present entry
-  ## survives until we finish.
+  ## Entry ref for the persister, or nil if already deleted (a dirty entry can't be evicted).
   withLock gLock:
-    result = if gTable.hasKey(id): gTable[id] else: nil
+    result = gLru.get(id)
 
 proc persistLoop() {.thread.} =
-  ## Drain the write queue: for each admitted paste, write its blob (large only) + DB row, then flip
-  ## the entry clean. If the entry was deleted mid-flight, roll back the row/blob we just wrote.
+  ## Drain the queue: write blob (large only) + DB row, then mark clean. Roll back if deleted mid-write.
   {.cast(gcsafe).}:
     while true:
       let id = gQueue.recv()
       let e = snapshotForPersist(id)
-      if e == nil: continue                      # deleted before flush; nothing written yet
+      if e == nil: continue                      # deleted before flush; nothing written
       var written = BlobId("")
-      var stored = Paste(
-        id: e.id, title: e.title, size: e.size, createdAt: e.createdAt,
-        visibility: e.visibility, isTruncated: e.isTruncated,
-        content: (if e.isTruncated: e.previewContent else: e.fullContent),
-        blobId: BlobId(""))
+      var stored = e.toPaste()                   # blobId set below once the blob is written
       try:
         if e.isTruncated:
           let (bid, _) = blobstore.saveFromString(e.fullContent)
@@ -260,11 +217,11 @@ proc persistLoop() {.thread.} =
           stored.blobId = bid
         db.insertPaste(stored, e.ownerIp)
       except CatchableError:
-        # Persist failed: drop the cached copy (paste lost — accepted) and clean any orphan blob.
+        # Persist failed: drop the cached copy (paste lost) + clean any orphan blob.
         if written.len > 0: discard blobstore.deleteBlob(written)
         discard removeFromCache(id)
         continue
       if not markPersisted(id, written):
-        # Entry deleted while we were writing -> roll back so we don't leave an orphan row/blob.
+        # Deleted mid-write: roll back so no orphan row/blob is left.
         discard db.deletePasteRow(id)
         if written.len > 0: discard blobstore.deleteBlob(written)

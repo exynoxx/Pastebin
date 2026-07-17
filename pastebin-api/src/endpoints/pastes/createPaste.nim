@@ -47,8 +47,9 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
         p.isTruncated = true
         p.blobId = BlobId("")
 
-    # Fast path: admit full content to the cache and return now.
-    if pastecache.tryAdmit(p, content, ownerIp):
+    # Fast path: when the cache is enabled and the paste fits its budget, admit full content to RAM
+    # and return now (the background persister writes it to disk).
+    if cfg.pasteCacheEnabled and pastecache.admit(p, content, ownerIp):
         ntfy.notifyPasteCreated(p)
         return p
 

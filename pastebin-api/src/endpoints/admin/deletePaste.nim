@@ -12,13 +12,12 @@ importuse pastecache
 
 proc handleAdminDeletePaste*(ctx: Ctx, id: string) =
     returnif: not ctx.requireAdmin()
-    if ctx.cfg.pasteCacheEnabled:
-        let cached = pastecache.removeFromCache(id)
-        if cached.wasCached:
-            if cached.blobId.len > 0: discard blobstore.deleteBlob(cached.blobId)
-            discard db.deletePasteRow(id)   # no-op if it was never persisted
-            ctx.req.respond(200, $(%*{"message": "Paste deleted successfully"}))
-            return
+    let cached = pastecache.removeFromCache(id)
+    if cached.wasCached:
+        if cached.blobId.len > 0: discard blobstore.deleteBlob(cached.blobId)
+        discard db.deletePasteRow(id)   # no-op if it was never persisted
+        ctx.req.respond(200, $(%*{"message": "Paste deleted successfully"}))
+        return
     let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
     if p.blobId.len > 0:
         discard blobstore.deleteBlob(p.blobId)

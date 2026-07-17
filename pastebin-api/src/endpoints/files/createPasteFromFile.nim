@@ -5,18 +5,13 @@ import std/[json, strutils, options]
 import ../routes
 import ../../types, ../../apperrors
 importuse db
-importuse ratelimit
 importuse timeutil
 import ../pastes/createPaste
 
 proc handleCreatePasteFromFile*(ctx: Ctx) =
     let root = parseJsonBodyOr400(ctx)
     let fileId = root{"fileId"}.getStr("")
-    # Resolve the file BEFORE the paste rate-limit check: checkPasteCreate records into the burst
-    # window / trips the penalty box, so a run of requests with a bad fileId must not consume that
-    # budget (or penalty-box the IP) when no paste is ever created.
     let f = fetchOr404(ctx, db.selectFile(fileId), "File not found")
-    returnif: ratelimit.rejectPasteLimit(ctx, ratelimit.checkPasteCreate(ctx.ip))
     let reqTitle = root{"title"}.getStr("")
     let title = if reqTitle.strip().len == 0: f.originalName else: reqTitle.strip()
     let visibility = root{"visibility"}.getStr("public")
@@ -29,3 +24,5 @@ proc handleCreatePasteFromFile*(ctx: Ctx) =
         ctx.req.respond(200, $(%*{"id": p.id}))
     except PayloadTooLargeError as e:
         ctx.respondError(413, e.msg)
+    except CacheFullError as e:
+        ctx.req.respond(429, errorJson(e.msg), extraHeaders = [("Retry-After", "5")])

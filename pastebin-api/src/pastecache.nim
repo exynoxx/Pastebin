@@ -1,7 +1,7 @@
 ## In-memory paste cache: a size-bounded LRU that serves reads and buffers not-yet-persisted writes.
 ## admit() holds a new paste in RAM and returns its id at once; a background persister thread drains
 ## it to db + blobstore, after which the entry lives on as a clean, evictable read-cache entry. When
-## a paste won't fit, admit() returns false and the caller persists synchronously. A paste is lost if
+## a paste won't fit, admit() returns false and the caller responds 429. A paste is lost if
 ## the box crashes between admit() and the flush (accepted, same as the access log).
 ##
 ## Concurrency: one process-wide Lock guards everything; Lru itself is not thread-safe. Entry content
@@ -118,13 +118,10 @@ proc snapshotForPersist(id: string): CacheEntry
 proc persistLoop() {.thread.}
 
 # ---- public API -------------------------------------------------------------
-# Every proc assumes the cache is enabled + inited: callers check cfg.pasteCacheEnabled and skip the
-# cache when off. initPasteCache is the exception — it reads cfg to decide whether to start the persister.
 
 proc initPasteCache*(cfg: AppConfig) =
-  ## Size the cache; start the persister only when enabled.
+  ## Size the cache and start the background persister.
   gLru.reset(cfg.cacheMaxBytes)
-  returnif: not cfg.pasteCacheEnabled
   createThread(gPersister, persistLoop)
 
 proc resetForTest*(maxBytes: int64) =

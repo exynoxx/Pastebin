@@ -5,7 +5,7 @@
 ## upload never leaves a half-written blob. Copies stream in bounded chunks (flat memory).
 
 import std/[os, sysrand]
-import types
+import types, macros
 
 var gRoot: string
 
@@ -38,7 +38,7 @@ proc blobExists*(blobId: BlobId): bool = fileExists(pathFor(blobId))
 
 proc deleteBlob*(blobId: BlobId): bool =
     let p = pathFor(blobId)
-    if not fileExists(p): return false
+    returnif(not fileExists(p), false)
     removeFile(p)
     true
 

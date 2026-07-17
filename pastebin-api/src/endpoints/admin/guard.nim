@@ -20,6 +20,7 @@
 
 import std/[tables, locks, times]
 import ../routes
+import ../../macros
 
 const
     BaseCooldownSec* = 2        ## first failed attempt locks the IP for this long
@@ -46,7 +47,7 @@ proc initAdminGuard*() =
 
 proc sweep(nowSec: int64) =
     ## Drop entries whose cooldown expired and that have been idle a while. Caller holds gLock.
-    if nowSec - gLastSweep < MaxCooldownSec: return
+    returnif(nowSec - gLastSweep < MaxCooldownSec)
     gLastSweep = nowSec
     var stale: seq[string]
     for ip, st in gFails:
@@ -87,7 +88,7 @@ proc clearAdminFailures(ip: string) =
 func constantTimeEq(a, b: string): bool =
     ## Length-checked constant-time compare: no early-out on the first differing byte, so a
     ## correct-prefix guess can't be distinguished from a wrong one by response timing.
-    if a.len != b.len: return false
+    returnif(a.len != b.len, false)
     var diff = 0
     for i in 0 ..< a.len:
         diff = diff or (ord(a[i]) xor ord(b[i]))

@@ -4,7 +4,7 @@
 ## can never block or fail a request.
 
 import std/[httpclient, json, strutils, strformat]
-import config, types
+import config, types, macros
 
 type NtfyMsg = object
     title, message, click: string
@@ -23,8 +23,7 @@ func formatSize(bytes: int64): string =
     while size >= 1024 and unit < units.len - 1:
         size /= 1024
         unit.inc
-    if unit == 0:
-        return &"{bytes} B"
+    returnif(unit == 0, &"{bytes} B")
     # "0.#": one optional decimal, trailing ".0" dropped.
     var s = formatFloat(size, ffDecimal, 1)
     if s.endsWith(".0"): s = s[0 ..< s.len - 2]
@@ -64,14 +63,14 @@ proc initNtfy*(cfg: AppConfig) =
         createThread(gThread, worker)
 
 proc notifyPasteCreated*(p: Paste) =
-    if not gEnabled: return
+    returnif(not gEnabled)
     gChan.send(NtfyMsg(
         title: &"New paste: {p.title}",
         message: &"{formatSize(p.size)} · {p.id}",
         click: &"{gPublicBase}/paste/{p.id}"))
 
 proc notifyFileUploaded*(f: StoredFile) =
-    if not gEnabled: return
+    returnif(not gEnabled)
     gChan.send(NtfyMsg(
         title: &"New upload: {f.originalName}",
         message: &"{formatSize(f.size)} · {f.id}",

@@ -29,7 +29,7 @@
 ## HTTP presentation together is why this module depends on the framework.
 
 import std/[tables, deques, locks, times, json, strutils]
-import config
+import config, macros
 import webframework/[httpserver, context, middleware]
 
 const
@@ -81,16 +81,16 @@ var
     gLastSweep: int64
 
 # Bodies live at the bottom so the public API reads first; Nim needs them declared before use.
-proc slidingRoll(st: SlidingState, nowSec: int64)
-proc slidingWouldAllow(st: SlidingState, limit: int64): bool
-proc slidingCommit(st: SlidingState)
-proc fixedRoll(st: FixedState, nowSec: int64)
-proc fixedWouldAllow(st: FixedState, limit: int64): bool
-proc fixedCommit(st: FixedState)
+func slidingRoll(st: SlidingState, nowSec: int64)
+func slidingWouldAllow(st: SlidingState, limit: int64): bool
+func slidingCommit(st: SlidingState)
+func fixedRoll(st: FixedState, nowSec: int64)
+func fixedWouldAllow(st: FixedState, limit: int64): bool
+func fixedCommit(st: FixedState)
 proc maybeSweep(nowSec: int64)
 proc ipState(ip: string, nowSec: int64): IpState
-proc allow(penalized: bool): Decision
-proc deny(retryAfterSeconds: int, penalized: bool): Decision
+func allow(penalized: bool): Decision
+func deny(retryAfterSeconds: int, penalized: bool): Decision
 
 template withIpState(ip: string; nowSec, st, body: untyped) =
     ## The shared preamble of every per-IP policy check: take the process lock, sweep idle entries,
@@ -134,10 +134,10 @@ proc tryAcquire*(ip: string, isUpload: bool): AcquireResult =
         slidingRoll(gGlobal, nowSec)
         if isUpload: fixedRoll(st.up, nowSec)
 
-        if not slidingWouldAllow(st.req, gPerIpLimit.int64): return Rejected
-        if not slidingWouldAllow(gGlobal, gGlobalLimit.int64): return Rejected
-        if gConcurrent >= gConcurrencyLimit: return Rejected
-        if isUpload and not fixedWouldAllow(st.up, gUploadsLimit.int64): return Rejected
+        returnif(not slidingWouldAllow(st.req, gPerIpLimit.int64), Rejected)
+        returnif(not slidingWouldAllow(gGlobal, gGlobalLimit.int64), Rejected)
+        returnif(gConcurrent >= gConcurrencyLimit, Rejected)
+        returnif(isUpload and not fixedWouldAllow(st.up, gUploadsLimit.int64), Rejected)
 
         slidingCommit(st.req)
         slidingCommit(gGlobal)
@@ -157,8 +157,7 @@ proc checkPasteCreate*(ip: string): Decision =
         # In the penalty box: one paste per interval regardless of how long ago the burst was.
         if nowSec < st.penaltyUntil:
             let sinceLast = nowSec - st.lastAllowed
-            if sinceLast < gPastePenaltyIntervalSeconds:
-                return deny(int(gPastePenaltyIntervalSeconds.int64 - sinceLast), penalized = true)
+            returnif(sinceLast < gPastePenaltyIntervalSeconds, deny(int(gPastePenaltyIntervalSeconds.int64 - sinceLast), penalized = true))
             st.lastAllowed = nowSec
             return allow(penalized = true)
 
@@ -198,7 +197,7 @@ proc rateLimit*(): Middleware[AppConfig] =
 proc rejectPasteLimit*(ctx: Ctx[AppConfig], d: Decision): bool =
     ## Turn a `checkPasteCreate` decision into an HTTP outcome: returns true (and responds 429) when
     ## the paste is rate-limited; false when it's allowed and the handler should proceed.
-    if d.allowed: return false
+    returnif(d.allowed, false)
     let msg =
         if d.penalized:
             "Too many pastes. You've been rate-limited to 1 paste per minute for a while — please slow down."
@@ -214,7 +213,7 @@ proc rejectPasteLimit*(ctx: Ctx[AppConfig], d: Decision): bool =
 
 # ---- private helpers -------------------------------------------------------
 
-proc slidingRoll(st: SlidingState, nowSec: int64) =
+func slidingRoll(st: SlidingState, nowSec: int64) =
     ## Advance the segmented window to `nowSec`, zeroing segments that rotated out. Pure time
     ## advancement — consumes no budget — so it's safe to run before deciding to admit. Caller
     ## holds gLock.
@@ -229,30 +228,30 @@ proc slidingRoll(st: SlidingState, nowSec: int64) =
                 st.counts[int((st.lastSeg + d) mod Segments)] = 0
         st.lastSeg = seg
 
-proc slidingWouldAllow(st: SlidingState, limit: int64): bool =
+func slidingWouldAllow(st: SlidingState, limit: int64): bool =
     ## True if the window (already rolled) has room. Read-only. Caller holds gLock.
     var total = 0
     for c in st.counts: total += c
     total.int64 < limit
 
-proc slidingCommit(st: SlidingState) =
+func slidingCommit(st: SlidingState) =
     ## Record one request in the current segment. Caller holds gLock.
     st.counts[int(st.lastSeg mod Segments)].inc
 
-proc fixedRoll(st: FixedState, nowSec: int64) =
+func fixedRoll(st: FixedState, nowSec: int64) =
     let winStart = (nowSec div WindowSec) * WindowSec
     if st.windowStart != winStart:
         st.windowStart = winStart
         st.count = 0
 
-proc fixedWouldAllow(st: FixedState, limit: int64): bool = st.count.int64 < limit
-proc fixedCommit(st: FixedState) = st.count.inc
+func fixedWouldAllow(st: FixedState, limit: int64): bool = st.count.int64 < limit
+func fixedCommit(st: FixedState) = st.count.inc
 
 proc maybeSweep(nowSec: int64) =
     ## Drop idle per-IP entries so the table can't grow unbounded; runs at most once per window.
     ## Keeps an IP while its paste penalty is active OR it has been seen recently by either policy.
     ## Caller holds gLock.
-    if nowSec - gLastSweep < WindowSec: return
+    returnif(nowSec - gLastSweep < WindowSec)
     gLastSweep = nowSec
     let idleCutoff = max(WindowSec * 2, max(gPasteWindowSeconds, gPastePenaltySeconds)).int64
     var stale: seq[string]
@@ -271,8 +270,8 @@ proc ipState(ip: string, nowSec: int64): IpState =
     result = gIps[ip]
     result.lastSeen = nowSec
 
-proc allow(penalized: bool): Decision =
+func allow(penalized: bool): Decision =
     Decision(allowed: true, retryAfterSeconds: 0, penalized: penalized)
 
-proc deny(retryAfterSeconds: int, penalized: bool): Decision =
+func deny(retryAfterSeconds: int, penalized: bool): Decision =
     Decision(allowed: false, retryAfterSeconds: retryAfterSeconds, penalized: penalized)

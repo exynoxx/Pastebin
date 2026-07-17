@@ -4,6 +4,7 @@
 ## (see loadConfig); the rest fall back to sensible defaults when their env var is unset.
 
 import std/[os, strutils]
+import macros
 
 type
     AppConfig* = object
@@ -53,7 +54,7 @@ type
 proc getLong(key: string, fallback: int64): int64 =
     ## Parse an env var or fall back to a default. Base-10.
     let v = getEnv(key)
-    if v.len == 0: return fallback
+    returnif(v.len == 0, fallback)
     try: parseBiggestInt(v.strip())
     except ValueError: fallback
 

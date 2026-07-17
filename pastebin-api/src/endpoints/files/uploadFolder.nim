@@ -11,7 +11,7 @@ import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
 import zippy/ziparchives
 
 func zipEntryName(entry: MultipartEntry): string
-proc zipFileName(folderName: string): string
+func zipFileName(folderName: string): string
 
 proc handleUploadFolder*(ctx: Ctx) =
     var entries: seq[MultipartEntry]
@@ -76,7 +76,7 @@ func zipEntryName(entry: MultipartEntry): string =
             parts.add seg
     if parts.len > 0: parts.join("/") else: "file"
 
-proc zipFileName(folderName: string): string =
+func zipFileName(folderName: string): string =
     var name = if folderName.strip().len == 0: "folder" else: folderName.strip()
     # Keep to a single safe path segment; the client may pass a nested path.
     var last = "folder"

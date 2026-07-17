@@ -7,7 +7,7 @@
 import std/[json, strutils, unicode, strformat]
 import ../routes
 import ../../types, ../../db, ../../blobstore, ../../quota, ../../ntfy,
-       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids, ../../pastecache
+       ../../timeutil, ../../apperrors, ../../ratelimit, ../../ids, ../../pastecache, ../../macros
 
 func deriveTitle(content: string, maxChars: int): string
 func buildPreview(content: string, previewChars: int): string
@@ -75,7 +75,7 @@ proc handleCreatePaste*(ctx: Ctx) =
     if content.strip().len == 0:
         ctx.respondError(400, "Content cannot be empty")
         return
-    if ctx.rejectPasteLimit(checkPasteCreate(ctx.ip)): return
+    returnif(ctx.rejectPasteLimit(checkPasteCreate(ctx.ip)))
     let title = root{"title"}.getStr("")
     let visibility = root{"visibility"}.getStr("public")
     try:
@@ -92,14 +92,11 @@ func deriveTitle(content: string, maxChars: int): string =
         if line.len > 0:
             firstLine = line
             break
-    if firstLine.len == 0:
-        return "Untitled"
-    if firstLine.runeLen <= maxChars:
-        return firstLine
+    returnif(firstLine.len == 0, "Untitled")
+    returnif(firstLine.runeLen <= maxChars, firstLine)
     firstLine.runeSubStr(0, maxChars).strip(leading = false, trailing = true) & "…"
 
 func buildPreview(content: string, previewChars: int): string =
-    if content.runeLen <= previewChars:
-        return content
+    returnif(content.runeLen <= previewChars, content)
     content.runeSubStr(0, previewChars) &
         "\n\n… (truncated — open the raw view for the full content)"

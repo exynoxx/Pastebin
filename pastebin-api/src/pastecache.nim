@@ -11,7 +11,7 @@
 ## (never evicted); only clean entries are LRU-evictable.
 
 import std/[locks, tables, options]
-import types, config, db, blobstore
+import types, config, db, blobstore, macros
 
 type
   CacheEntry = ref object
@@ -75,7 +75,7 @@ proc initPasteCache*(cfg: AppConfig) =
   clearEntries()
   gTable = initTable[string, CacheEntry]()
   gPendingByIp = initTable[string, int64]()
-  if not gEnabled: return
+  returnif(not gEnabled)
   gQueue.open()
   gPersisterStarted = true
   createThread(gPersister, persistLoop)
@@ -95,19 +95,19 @@ proc resetForTest*(maxBytes: int64) =
     gPendingByIp = initTable[string, int64]()
 
 proc pendingBytesForOwner*(ownerIp: string): int64 =
-  if not gEnabled: return 0
+  returnif(not gEnabled, 0)
   withLock gLock:
     result = gPendingByIp.getOrDefault(ownerIp, 0)
 
 proc tryAdmit*(display: Paste, fullContent, ownerIp: string): bool =
   ## Admit a new paste to the cache as a dirty entry. Returns false (caller persists synchronously)
   ## when the cache is disabled or the paste cannot fit even after evicting all clean entries.
-  if not gEnabled: return false
+  returnif(not gEnabled, false)
   let cost = fullContent.len.int64
   withLock gLock:
-    if cost > gMaxBytes: return false
+    returnif(cost > gMaxBytes, false)
     evictCleanToFit(cost)
-    if gBytes + cost > gMaxBytes: return false   # only dirty bytes remain; cannot make room
+    returnif(gBytes + cost > gMaxBytes, false)   # only dirty bytes remain; cannot make room
     let e = CacheEntry(
       id: display.id, title: display.title, ownerIp: ownerIp,
       size: display.size, createdAt: display.createdAt, visibility: display.visibility,
@@ -125,9 +125,9 @@ proc tryAdmit*(display: Paste, fullContent, ownerIp: string): bool =
 
 proc getDisplayPaste*(id: string): Option[Paste] =
   ## Cache read for GET /api/pastes/{id}. Touches LRU. content = full (inline) or preview (large).
-  if not gEnabled: return none(Paste)
+  returnif(not gEnabled, none(Paste))
   withLock gLock:
-    if not gTable.hasKey(id): return none(Paste)
+    returnif(not gTable.hasKey(id), none(Paste))
     let e = gTable[id]
     touch(e)
     result = some(Paste(
@@ -138,9 +138,9 @@ proc getDisplayPaste*(id: string): Option[Paste] =
 proc acquireForRaw*(id: string): Option[CachedRawView] =
   ## Cache read for GET /api/pastes/{id}/raw. Touches LRU; snapshots dirty/blobId under the lock and
   ## returns a handle whose content the caller reads WITHOUT the lock (content is immutable).
-  if not gEnabled: return none(CachedRawView)
+  returnif(not gEnabled, none(CachedRawView))
   withLock gLock:
-    if not gTable.hasKey(id): return none(CachedRawView)
+    returnif(not gTable.hasKey(id), none(CachedRawView))
     let e = gTable[id]
     touch(e)
     result = some(CachedRawView(dirty: e.dirty, blobId: e.blobId, entry: e))
@@ -151,9 +151,9 @@ proc markPersisted*(id: string, blobId: BlobId): bool =
   ## Called by the persister after a successful blob+DB write: flip dirty->clean, record blobId,
   ## release the pending-bytes reservation. Returns false if the entry is gone (deleted mid-flight),
   ## in which case the caller must roll back the row/blob it just wrote.
-  if not gEnabled: return false
+  returnif(not gEnabled, false)
   withLock gLock:
-    if not gTable.hasKey(id): return false
+    returnif(not gTable.hasKey(id), false)
     let e = gTable[id]
     if e.dirty:
       e.dirty = false
@@ -165,9 +165,9 @@ proc markPersisted*(id: string, blobId: BlobId): bool =
 proc removeFromCache*(id: string): tuple[wasCached: bool, blobId: BlobId] =
   ## Evict an entry (admin delete). Returns whether it was cached and its blobId ("" if inline or
   ## not-yet-flushed) so the caller can delete the on-disk blob if one exists.
-  if not gEnabled: return (false, BlobId(""))
+  returnif(not gEnabled, (false, BlobId("")))
   withLock gLock:
-    if not gTable.hasKey(id): return (false, BlobId(""))
+    returnif(not gTable.hasKey(id), (false, BlobId("")))
     let e = gTable[id]
     let bid = e.blobId
     if e.dirty:
@@ -194,7 +194,7 @@ proc pushFront(e: CacheEntry) =
   if gTail == nil: gTail = e
 
 proc touch(e: CacheEntry) =
-  if gHead == e: return
+  returnif(gHead == e)
   unlink(e)
   pushFront(e)
 

@@ -13,7 +13,7 @@
 import std/[strutils, sequtils]
 import webframework/httpserver
 
-proc resolveClientIp*(req: Request): string =
+func resolveClientIp*(req: Request): string =
     [
         req.header("X-Forwarded-For").split(',', 1)[0].strip(),
         req.header("X-Real-IP").strip(),

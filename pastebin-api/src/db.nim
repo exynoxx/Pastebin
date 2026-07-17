@@ -13,7 +13,7 @@
 
 import std/[locks, os, strutils, options]
 import db_connector/db_sqlite
-import types
+import types, macros
 
 var
     gDbPath: string
@@ -36,13 +36,12 @@ proc openConn(path: string): DbConn =
 proc columnExists(db: DbConn, table, column: string): bool =
     # PRAGMA table_info: cid, name, type, notnull, dflt_value, pk — name is index 1.
     for row in db.fastRows(sql("PRAGMA table_info(" & table & ");")):
-        if cmpIgnoreCase(row[1], column) == 0:
-            return true
+        returnif(cmpIgnoreCase(row[1], column) == 0, true)
     false
 
 proc addColumnIfMissing(db: DbConn, table, column, typ: string) =
     ## SQLite has no "ADD COLUMN IF NOT EXISTS"; add only when absent (idempotent migration).
-    if db.columnExists(table, column): return
+    returnif(db.columnExists(table, column))
     db.exec(sql("ALTER TABLE " & table & " ADD COLUMN " & column & " " & typ & ";"))
 
 proc initDb*(sqlitePath: string) =
@@ -126,7 +125,7 @@ proc selectPaste*(id: string): Option[Paste] =
         SELECT id, title, content, size, is_truncated, created_at, blob_id, visibility
         FROM pastes WHERE id = ? LIMIT 1;
     """, id)
-    if rows.len == 0: return none(Paste)
+    returnif(rows.len == 0, none(Paste))
     let r = rows[0]
     let paste = Paste(
         id: r[0], title: r[1], content: r[2],
@@ -196,7 +195,7 @@ proc selectFile*(id: string): Option[StoredFile] =
         SELECT id, original_name, content_type, size, uploaded_at, blob_id, visibility
         FROM files WHERE id = ? LIMIT 1;
     """, id)
-    if rows.len == 0: return none(StoredFile)
+    returnif(rows.len == 0, none(StoredFile))
     let r = rows[0]
     let stored = StoredFile(
         id: r[0], originalName: r[1], contentType: r[2],

@@ -2,10 +2,10 @@
 
 import std/[json, options]
 import ../routes, ../admin/guard
-import ../../types, ../../db, ../../blobstore
+import ../../types, ../../db, ../../blobstore, ../../macros
 
 proc handleDeleteFile*(ctx: Ctx, id: string) =
-    if not ctx.requireAdmin(): return
+    returnif(not ctx.requireAdmin())
     let f = fetchOr404(ctx, selectFile(id), "File not found")
     if f.blobId.len > 0:
         discard deleteBlob(f.blobId)

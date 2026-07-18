@@ -4,7 +4,7 @@
 ## the one bit of paste logic shared with the create-paste-from-file slice, so it is exported here
 ## (its canonical home) rather than living in a separate service layer.
 
-import std/[json, strutils, unicode, strformat]
+import std/[json, strutils, unicode]
 import ../routes
 import ../../types, ../../apperrors
 referencing quota
@@ -13,22 +13,23 @@ referencing timeutil
 referencing ids
 referencing pastecache
 
+const
+    PastePreviewChars = 8_192      ## chars kept in the stored inline preview of a large paste
+    UntitledTitleMaxChars = 40     ## cap on a title auto-derived from the first content line
+
 func deriveTitle(content: string, maxChars: int): string
 func buildPreview(content: string, previewChars: int): string
 
 proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string): Paste =
-    ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) on oversize/over-quota.
+    ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) when over the per-IP quota.
     ## Keeps the full content in RAM and returns immediately; a background thread persists it. Raises
     ## CacheFullError (-> 429) when the cache can't admit the paste (server at capacity).
+    ## Paste content is bounded only by the global request cap (maxRequestBytes), not a per-paste limit.
     let id = ids.newId()
-    let ttl = if title.strip().len == 0: deriveTitle(content, cfg.untitledTitleMaxChars)
+    let ttl = if title.strip().len == 0: deriveTitle(content, UntitledTitleMaxChars)
               else: title.strip()
     let byteCount = content.len.int64   # Nim strings are bytes => UTF-8 byte count
     let visibility = types.normalizeVisibility(visibilityIn)
-
-    if byteCount > cfg.maxPasteBytes:
-        raise newException(PayloadTooLargeError,
-            &"Paste size exceeds the maximum allowed size of {cfg.maxPasteBytes div (1024*1024)}MB")
 
     quota.ensureWithinQuota(ownerIp, byteCount, cfg.maxStorageBytesPerIp)
 
@@ -40,7 +41,7 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
         p.isTruncated = false
         p.blobId = BlobId("")
     else:
-        p.content = buildPreview(content, cfg.pastePreviewChars)
+        p.content = buildPreview(content, PastePreviewChars)
         p.isTruncated = true
         p.blobId = BlobId("")
 
@@ -52,16 +53,8 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
     p
 
 proc handleCreatePaste*(ctx: Ctx) =
-    # Bound the body BEFORE it's read into a string and parsed into a node tree — otherwise a large
-    # JSON POST (up to MAX_REQUEST_BYTES, ~51 MB) is fully materialised and parsed before the
-    # maxPasteBytes check in createPasteRecord, blowing the container memory cap.
-    # The cap leaves generous headroom over maxPasteBytes for the JSON envelope + string escaping,
-    # so a legitimate max-size paste is never rejected here (the exact content check runs later).
-    if ctx.req.bodyLen > ctx.cfg.maxPasteBytes * 2 + 65_536:
-        ctx.respondError(413,
-            "Paste size exceeds the maximum allowed size of " &
-            $(ctx.cfg.maxPasteBytes div (1024*1024)) & "MB")
-        return
+    # No per-paste size limit: the body is already bounded by the global request cap (maxRequestBytes,
+    # ~51 MB), enforced by the framework before this handler runs, so it can't grow unbounded here.
     let root = parseJsonBodyOr400(ctx)
     let content = root{"content"}.getStr("")
     if content.strip().len == 0:

@@ -57,8 +57,7 @@ source of truth (with defaults and descriptions). The main ones:
 
 | Var | Default | Purpose |
 |---|---|---|
-| `MAX_REQUEST_BYTES` | ~51 MB | Max bytes per upload/paste (keep in sync with nginx `client_max_body_size`) |
-| `MAX_PASTE_BYTES` | 10 MB | Hard cap on a single paste |
+| `MAX_REQUEST_BYTES` | ~51 MB | Max bytes per upload/paste (keep in sync with nginx `client_max_body_size`); also the effective per-paste ceiling |
 | `MAX_STORAGE_BYTES_PER_IP` | 100 MB | Total stored bytes per client IP |
 | `RATE_LIMIT_GLOBAL_CONCURRENCY` | 30 | Max concurrent in-handler requests before shedding (503); mirrors nginx `limit_conn` |
 | `REQUEST_TIMEOUT_MS` | 30000 | Recv/send idle timeout; a stalled client is dropped (408), freeing its worker |

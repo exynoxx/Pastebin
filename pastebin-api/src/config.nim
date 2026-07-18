@@ -1,7 +1,6 @@
 ## Typed application configuration, sourced from environment variables.
-##
-## A few limits that nobody tunes in practice are fixed constants rather than env vars
-## (see loadConfig); the rest fall back to sensible defaults when their env var is unset.
+## Each field falls back to a sensible default when its env var is unset.
+## (Never-tuned limits live as plain consts at their use site, not here.)
 
 import std/[os, strutils]
 
@@ -10,11 +9,8 @@ type
         # --- storage / size limits ---
         maxRequestBytes*: int64        # MAX_REQUEST_BYTES  raw request-body cap, ~51 MB (keep in sync with nginx client_max_body_size)
         inlinePasteMaxBytes*: int      # INLINE_PASTE_MAX_BYTES   256 KB
-        pastePreviewChars*: int        # fixed 8192
-        maxPasteBytes*: int64          # MAX_PASTE_BYTES          10 MB
         maxStorageBytesPerIp*: int64   # MAX_STORAGE_BYTES_PER_IP 100 MB
         maxFileUploadBytes*: int64     # MAX_FILE_UPLOAD_BYTES    50 MB (single file & folder upload)
-        untitledTitleMaxChars*: int    # fixed 40
 
         # --- paste memory cache ---
         cacheMaxBytes*: int64          # CACHE_MAX_BYTES  128 MB (dirty pending + clean LRU combined)
@@ -54,10 +50,7 @@ proc loadConfig*(): AppConfig =
     # plus multipart-envelope headroom, so a full 50 MB file isn't rejected by the transport layer.
     # Keep in sync with nginx client_max_body_size.
     result.maxRequestBytes         = getLong("MAX_REQUEST_BYTES", 53_477_376)  # ~51 MB
-    result.pastePreviewChars       = 8_192
-    result.untitledTitleMaxChars   = 40
     result.inlinePasteMaxBytes     = getLong("INLINE_PASTE_MAX_BYTES", 262_144).int
-    result.maxPasteBytes           = getLong("MAX_PASTE_BYTES", 10_485_760)
     result.maxStorageBytesPerIp    = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
     result.maxFileUploadBytes      = getLong("MAX_FILE_UPLOAD_BYTES", 52_428_800)   # 50 MB (single file & folder upload)
     result.globalConcurrency       = getLong("RATE_LIMIT_GLOBAL_CONCURRENCY", 30).int

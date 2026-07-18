@@ -14,7 +14,7 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
 ```
 
 - **`pastebin-api/`** — **Nim backend, the deployed one.** Source of truth for all limits,
-  quotas, and storage. (Originally a port of a .NET backend, since removed — see Backend below.)
+  quotas, and storage. (Was a .NET port; see Backend below.)
 - **`pastebin-frontend/`** — React 18 SPA (Create React App / `react-scripts`). `npm run build` → static `/build`.
 - **`nginx/`** — Reverse proxy + static serving. Serves the built SPA, proxies `/api/*` to the API,
   sets `X-Real-IP`/`X-Forwarded-For`, applies `security-headers.conf`. Serves **plain HTTP on :80** —
@@ -41,7 +41,7 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
   helper procs/funcs at the bottom. Since Nim requires declaration-before-use, add a one-line forward
   declaration near the top for any private helper a public proc calls.
 
-## Backend (`pastebin-api/`) — the deployed one
+## Backend (`pastebin-api/`)
 
 The Pi runs this **Nim** backend (`task build` builds `pastebin-api/Dockerfile`). It began as a
 drop-in port of a .NET backend, but that .NET tree has been **deleted**, and the Nim backend has
@@ -122,14 +122,11 @@ Auth is hands-free: the Pi password lives in **`.taskenv`** (gitignored, `PI_PAS
 are `sshpass`-wrapped; leave `PI_PASS` empty to use an SSH key instead.
 
 **Deploy runs over the tailnet — the Pi is no longer on a fixed LAN, so always deploy via Tailscale.**
-`.taskenv` pins `PI_IP` to the Pi's **tailnet** address: the Pi is `rpi` (`100.120.214.111`), and its
-registry (`:5000`) + SSH (`:22`) are reachable there, so plain `task` (build + deploy) just works.
-Prerequisites: (1) `tailscaled` running locally (`sudo systemctl start tailscaled` — needs the user's
-sudo password); (2) the `pastebin-builder` buildx builder must trust the tailnet registry
-`100.120.214.111:5000` — its insecure-registry trust is pinned to one `host:port`, so (re)create it
-with a config TOML for that address (same as `task setup`'s builder step). The Pi still pulls from its
-own `127.0.0.1:5000`. The data disk is located by filesystem **UUID** (`<data-uuid>`), not mount path,
-since OMV mounts it at `/srv/dev-disk-by-uuid-<uuid>`.
+`.taskenv` pins `PI_IP` to the Pi's tailnet address `100.120.214.111` (host `rpi`), where its registry
+(`:5000`) and SSH (`:22`) are reachable, so plain `task` just works. Prerequisites: (1) `tailscaled`
+running locally (`sudo systemctl start tailscaled` — needs the user's sudo password); (2) the
+`pastebin-builder` buildx builder must trust the tailnet registry `100.120.214.111:5000` (insecure-registry
+trust is pinned to one `host:port`, so recreate it as in `task setup`).
 
 - **Build stages run natively, not emulated.** Both Dockerfiles pin their build stage to
   `FROM --platform=$BUILDPLATFORM …` (the workstation's amd64) and target arm64 only for the final

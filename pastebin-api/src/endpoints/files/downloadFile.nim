@@ -42,7 +42,7 @@ proc resolveDownload*(fileId: string): Option[DownloadData] =
         contentType: f.contentType, fileName: f.originalName))
 
 proc handleDownloadFile*(ctx: Ctx, id: string) =
-    let dd = fetchOr404(ctx, resolveDownload(id), "File not found")
+    let dd = resolveDownload(id).getOr404(ctx, "File not found")
     let disposition = contentDispositionAttachment(dd.fileName)
     ctx.req.respondFile(dd.blobPath, dd.contentType,
         rangeHeader = ctx.req.header("Range"), contentDisposition = disposition)

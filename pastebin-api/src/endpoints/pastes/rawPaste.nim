@@ -19,7 +19,7 @@ proc handleRawPaste*(ctx: Ctx, id: string) =
         else:
             ctx.req.respond(200, pastecache.content(v), contentType = "text/plain; charset=utf-8")
         return
-    let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
+    let p = db.selectPaste(id).getOr404(ctx, "Paste not found")
     if p.blobId.len > 0 and blobstore.blobExists(p.blobId):
         ctx.req.respondFile(blobstore.blobPath(p.blobId), "text/plain; charset=utf-8",
             rangeHeader = ctx.req.header("Range"))

@@ -11,7 +11,7 @@ import ../pastes/createPaste
 proc handleCreatePasteFromFile*(ctx: Ctx) =
     let root = parseJsonBodyOr400(ctx)
     let fileId = root{"fileId"}.getStr("")
-    let f = fetchOr404(ctx, db.selectFile(fileId), "File not found")
+    let f = db.selectFile(fileId).getOr404(ctx, "File not found")
     let reqTitle = root{"title"}.getStr("")
     let title = if reqTitle.strip().len == 0: f.originalName else: reqTitle.strip()
     let visibility = root{"visibility"}.getStr("public")

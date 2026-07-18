@@ -5,5 +5,5 @@ import ../routes, ../../json
 referencing db
 
 proc handleGetFile*(ctx: Ctx, id: string) =
-    let f = fetchOr404(ctx, db.selectFile(id), "File not found")
+    let f = db.selectFile(id).getOr404(ctx, "File not found")
     ctx.req.respond(200, storedFileJson(f))

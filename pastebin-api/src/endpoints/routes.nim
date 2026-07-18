@@ -14,7 +14,7 @@ referencing accesslog
 
 # Re-export what handlers reach for through this module — httpserver (Request + response helpers),
 # config (AppConfig), the framework's Ctx-level helpers, and the shared control-flow templates
-# (fetchOr404/returnif/swallowException). NOT the framework's generic `Ctx`: the app-bound alias below
+# (getOr404/returnif/swallowException). NOT the framework's generic `Ctx`: the app-bound alias below
 # owns that name, and re-exporting the generic one would make it ambiguous.
 export httpserver, config
 export fctx.errorJson, fctx.respondError, fctx.parseJsonBodyOr400

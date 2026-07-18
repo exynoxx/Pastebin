@@ -8,7 +8,7 @@ referencing blobstore
 
 proc handleDeleteFile*(ctx: Ctx, id: string) =
     returnif: not ctx.requireAdmin()
-    let f = fetchOr404(ctx, db.selectFile(id), "File not found")
+    let f = db.selectFile(id).getOr404(ctx, "File not found")
     if f.blobId.len > 0:
         discard blobstore.deleteBlob(f.blobId)
     if db.deleteFileRow(id):

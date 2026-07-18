@@ -41,7 +41,7 @@ proc respond*[E](ctx: Ctx[E], statusCode: int, body: string,
 
 # ---- handler control-flow templates ----------------------------------------
 # Early-`return`s from the enclosing handler, so it must be a template, not a proc. (The generic
-# fetchOr404 lives in the shared common/ project; this one is JSON-body specific, so it stays here.)
+# getOr404 lives in the shared common/ project; this one is JSON-body specific, so it stays here.)
 
 template parseJsonBodyOr400*(ctx: untyped): JsonNode =
     ## Parse the request body as JSON, or respond 400 and return from the handler.

@@ -18,7 +18,7 @@ proc handleAdminDeletePaste*(ctx: Ctx, id: string) =
         discard db.deletePasteRow(id)   # no-op if it was never persisted
         ctx.req.respond(200, $(%*{"message": "Paste deleted successfully"}))
         return
-    let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
+    let p = db.selectPaste(id).getOr404(ctx, "Paste not found")
     if p.blobId.len > 0:
         discard blobstore.deleteBlob(p.blobId)
     if db.deletePasteRow(id):

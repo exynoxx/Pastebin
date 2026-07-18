@@ -13,5 +13,5 @@ proc handleGetPaste*(ctx: Ctx, id: string) =
     if cached.isSome:
         ctx.req.respond(200, pasteJson(cached.get))
         return
-    let p = fetchOr404(ctx, db.selectPaste(id), "Paste not found")
+    let p = db.selectPaste(id).getOr404(ctx, "Paste not found")
     ctx.req.respond(200, pasteJson(p))

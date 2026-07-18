@@ -5,6 +5,7 @@
 ## chain (the rate limiter — see ratelimit.nim). (Admin auth isn't composed here — admin handlers
 ## call requireAdmin upfront; see endpoints/admin/guard.)
 
+import std/strutils
 import webframework/server
 import webframework/context as fctx
 import common/templates
@@ -23,6 +24,14 @@ export templates
 type
     Ctx* = fctx.Ctx[AppConfig]
         ## The framework's generic context bound to this app's config. Handlers name it as `Ctx`.
+
+func clampedQueryInt*(ctx: Ctx, name: string, default, lo, hi: int): int =
+    result = default
+    let raw = ctx.req.queryParam(name)
+    if raw.len > 0:
+        try: result = parseInt(raw)
+        except ValueError: result = default
+    result = max(lo, min(result, hi))
 
 # Handlers are imported AFTER `Ctx` is declared: each handler imports this module for `Ctx`, and this
 # module imports them to register them. That mutual dependency only resolves because `Ctx` is already

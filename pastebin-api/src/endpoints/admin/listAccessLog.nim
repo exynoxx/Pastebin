@@ -10,12 +10,7 @@ const
 
 proc handleAdminAccessLog*(ctx: Ctx) =
     returnif: not ctx.requireAdmin()
-    var limit = DefaultLimit
-    let lp = ctx.req.queryParam("limit")
-    if lp.len > 0:
-        try: limit = parseInt(lp)
-        except ValueError: limit = DefaultLimit
-    limit = max(1, min(limit, MaxLimit))
+    let limit = ctx.clampedQueryInt("limit", DefaultLimit, 1, MaxLimit)
 
     # Each line is `timestamp ip method path status durationms`; the timestamp itself holds a space
     # (`date time`) and paths are URL-encoded (no spaces), so a plain split yields exactly 7 tokens.

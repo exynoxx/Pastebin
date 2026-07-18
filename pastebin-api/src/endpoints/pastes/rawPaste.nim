@@ -14,14 +14,12 @@ proc handleRawPaste*(ctx: Ctx, id: string) =
     if rv.isSome:
         let v = rv.get
         if (not v.dirty) and v.blobId.len > 0 and blobstore.blobExists(v.blobId):
-            ctx.req.respondFile(blobstore.blobPath(v.blobId), "text/plain; charset=utf-8",
-                rangeHeader = ctx.req.header("Range"))
+            ctx.req.respondFile(blobstore.blobPath(v.blobId), "text/plain; charset=utf-8",rangeHeader = ctx.req.header("Range"))
         else:
             ctx.req.respond(200, pastecache.content(v), contentType = "text/plain; charset=utf-8")
         return
     let p = db.selectPaste(id).getOr404(ctx, "Paste not found")
     if p.blobId.len > 0 and blobstore.blobExists(p.blobId):
-        ctx.req.respondFile(blobstore.blobPath(p.blobId), "text/plain; charset=utf-8",
-            rangeHeader = ctx.req.header("Range"))
+        ctx.req.respondFile(blobstore.blobPath(p.blobId), "text/plain; charset=utf-8",rangeHeader = ctx.req.header("Range"))
     else:
         ctx.req.respond(200, p.content, contentType = "text/plain; charset=utf-8")

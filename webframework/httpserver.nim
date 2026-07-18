@@ -18,6 +18,7 @@
 import std/[net, os, strutils, uri, json]
 from std/posix import Timeval, Time, Suseconds, Socklen, setsockopt,
     SOL_SOCKET, SO_RCVTIMEO, SO_SNDTIMEO
+from std/httpcore import HttpCode, `$`
 import common/templates
 import tmpfile
 
@@ -59,22 +60,6 @@ func addBytes(dst: var string, src: string, n: int) =
     let old = dst.len
     dst.setLen(old + n)
     copyMem(addr dst[old], unsafeAddr src[0], n)
-
-func reason(code: int): string =
-    ## Reason phrase for the status codes this app emits. A case (not a global Table) keeps the
-    ## proc GC-safe so it can run on the worker threads.
-    case code
-    of 200: "OK"
-    of 206: "Partial Content"
-    of 400: "Bad Request"
-    of 404: "Not Found"
-    of 408: "Request Timeout"
-    of 413: "Payload Too Large"
-    of 416: "Range Not Satisfiable"
-    of 429: "Too Many Requests"
-    of 500: "Internal Server Error"
-    of 503: "Service Unavailable"
-    else: "OK"
 
 # ---- request helpers -------------------------------------------------------
 
@@ -130,7 +115,8 @@ proc sendAll(sock: Socket, buf: pointer, size: int) =
         sent += n
 
 func buildHead(code: int, headers: seq[(string, string)]): string =
-    result = "HTTP/1.1 " & $code & " " & reason(code) & "\r\n"
+    # $HttpCode yields "<code> <reason>" (e.g. "200 OK") via std/httpcore's own GC-safe case.
+    result = "HTTP/1.1 " & $code.HttpCode & "\r\n"
     for (k, v) in headers:
         result.add k & ": " & v & "\r\n"
     result.add "Connection: close\r\n\r\n"

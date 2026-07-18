@@ -21,7 +21,7 @@ proc main() =
     db.initDb(cfg.sqlitePath)
     blobstore.initBlobStore(cfg.blobStoragePath)
     pastecache.initPasteCache(cfg)
-    initAdminGuard()
+    guard.initAdminGuard()
     ratelimit.initRateLimiter(cfg)
     accesslog.initAccessLog(cfg)
     ntfy.initNtfy(cfg)

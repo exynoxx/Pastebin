@@ -31,7 +31,7 @@ import
     pastes/recentPastes, pastes/createPaste, pastes/getPaste, pastes/rawPaste,
     files/uploadFile, files/uploadFolder, files/createPasteFromFile,
     files/getFile, files/deleteFile, files/downloadFile, files/viewFile,
-    admin/listPastes, admin/deletePaste, admin/deleteRecentPastes
+    admin/listPastes, admin/deletePaste, admin/deleteRecentPastes, admin/listAccessLog
 
 func registerRoutes*(): RouteTable[AppConfig] =
     result.use(accesslog.accessLog())   # outermost: records every access, even those rate-limited (503) or 404
@@ -52,3 +52,4 @@ func registerRoutes*(): RouteTable[AppConfig] =
     result.get(   "/api/admin/pastes",                 handleAdminListPastes)
     result.delete("/api/admin/pastes",                 handleAdminDeleteRecentPastes)  # ?last=N bulk delete
     result.delete("/api/admin/pastes/{id}",            handleAdminDeletePaste)
+    result.get(   "/api/admin/access-log",             handleAdminAccessLog)

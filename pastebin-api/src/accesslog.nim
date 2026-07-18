@@ -87,6 +87,22 @@ func accessLog*(): Middleware[AppConfig] =
                     gBuf.add line
                     gBuf.add '\n'
 
+proc recentLines*(limit: int): seq[string] =
+    ## Newest-first lines of the active log. Forces a flush first (under gLock) so buffered lines are
+    ## included and there's no file/gBuf duplication race. Admin-only + infrequent, so holding the lock
+    ## across the small (<= maxBytes, 5 MB) file read is acceptable. Reads only the active file: right
+    ## after a size-rotation it yields fewer lines (older ones are in access.log.N) — fine for a
+    ## "recent" view, consistent with rotated files being an external (cron) concern.
+    returnif: not gEnabled          # disabled => @[]
+    var content: string
+    withLock gLock:
+        flushBuffer()
+        content = readFile(gPath)   # inside the lock so it can't interleave with a flush/rotate
+    var lines = content.splitLines()
+    if lines.len > 0 and lines[^1].len == 0: lines.setLen(lines.len - 1)  # drop trailing "" after last '\n'
+    let startIdx = max(0, lines.len - limit)
+    for i in countdown(lines.len - 1, startIdx): result.add lines[i]       # newest first
+
 # ---- private helpers -------------------------------------------------------
 
 proc flushLoop() {.thread.} =

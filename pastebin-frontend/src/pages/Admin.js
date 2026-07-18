@@ -23,6 +23,8 @@ export function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [groupByIp, setGroupByIp] = useState(false);
+  const [view, setView] = useState('content'); // 'content' | 'accesslog'
+  const [logEntries, setLogEntries] = useState([]);
   const navigate = useNavigate();
 
   // Reads the stored token, prompting once if it's missing.
@@ -53,9 +55,29 @@ export function Admin() {
     }
   }, []);
 
+  // Access log lives in a flat file the API reads back; loaded lazily when its tab is opened.
+  const loadAccessLog = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get('/admin/access-log', { headers: authHeader() });
+      setLogEntries(response.data);
+    } catch (err) {
+      setError(handleAuthError(err, 'Failed to load access log'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadPastes();
   }, [loadPastes]);
+
+  const showAccessLog = () => {
+    setView('accesslog');
+    loadAccessLog();
+  };
+  const refresh = () => (view === 'content' ? loadPastes() : loadAccessLog());
 
   const deletePaste = async (p) => {
     if (!window.confirm(`Delete ${p.kind} "${p.title}"? This cannot be undone.`)) return;
@@ -107,62 +129,97 @@ export function Admin() {
       <div className="card">
         <div className="paste-header">
           <div>
-            <h2>Admin — All Content</h2>
-            <div className="paste-meta">{pastes.length} item(s)</div>
+            <h2>{view === 'content' ? 'Admin — All Content' : 'Admin — Access Log'}</h2>
+            <div className="paste-meta">
+              {view === 'content'
+                ? `${pastes.length} item(s)`
+                : `${logEntries.length} entries`}
+            </div>
           </div>
           <div className="paste-actions">
             <button className="btn btn-secondary" onClick={() => navigate('/')}>
               Home
             </button>
-            <button className="btn btn-secondary" onClick={loadPastes}>
+            <button className="btn btn-secondary" onClick={refresh}>
               Refresh
             </button>
             <button
               className="btn btn-secondary"
-              disabled={!groupByIp}
-              onClick={() => setGroupByIp(false)}
+              disabled={view === 'content'}
+              onClick={() => setView('content')}
             >
-              Flat
+              Content
             </button>
             <button
               className="btn btn-secondary"
-              disabled={groupByIp}
-              onClick={() => setGroupByIp(true)}
+              disabled={view === 'accesslog'}
+              onClick={showAccessLog}
             >
-              By IP
+              Access log
             </button>
+            {view === 'content' && (
+              <>
+                <button
+                  className="btn btn-secondary"
+                  disabled={!groupByIp}
+                  onClick={() => setGroupByIp(false)}
+                >
+                  Flat
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  disabled={groupByIp}
+                  onClick={() => setGroupByIp(true)}
+                >
+                  By IP
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
-        {!error && pastes.length === 0 && (
-          <div className="alert alert-info">No content yet.</div>
+
+        {view === 'content' && (
+          <>
+            {!error && pastes.length === 0 && (
+              <div className="alert alert-info">No content yet.</div>
+            )}
+            {groupByIp ? (
+              groups.map(([ip, group]) => {
+                const totalSize = group.reduce((sum, p) => sum + p.size, 0);
+                return (
+                  <div key={ip} className="ip-group" style={{ marginTop: 24 }}>
+                    <div className="paste-header">
+                      <div className="paste-meta">
+                        {`IP ${ip} · ${group.length} item(s) · ${formatBytes(totalSize)}`}
+                      </div>
+                      <div className="paste-actions">
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => deletePastesByIp(ip, group)}
+                        >
+                          Delete all from this IP
+                        </button>
+                      </div>
+                    </div>
+                    <ul className="recent-pastes">{group.map(renderPasteItem)}</ul>
+                  </div>
+                );
+              })
+            ) : (
+              <ul className="recent-pastes">{pastes.map(renderPasteItem)}</ul>
+            )}
+          </>
         )}
 
-        {groupByIp ? (
-          groups.map(([ip, group]) => {
-            const totalSize = group.reduce((sum, p) => sum + p.size, 0);
-            return (
-              <div key={ip} className="ip-group" style={{ marginTop: 24 }}>
-                <div className="paste-header">
-                  <div className="paste-meta">
-                    {`IP ${ip} · ${group.length} item(s) · ${formatBytes(totalSize)}`}
-                  </div>
-                  <div className="paste-actions">
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => deletePastesByIp(ip, group)}
-                    >
-                      Delete all from this IP
-                    </button>
-                  </div>
-                </div>
-                <ul className="recent-pastes">{group.map(renderPasteItem)}</ul>
-              </div>
-            );
-          })
-        ) : (
-          <ul className="recent-pastes">{pastes.map(renderPasteItem)}</ul>
+        {view === 'accesslog' && (
+          <>
+            {!error && logEntries.length === 0 && (
+              <div className="alert alert-info">No access-log entries.</div>
+            )}
+            <ul className="recent-pastes">{logEntries.map(renderLogEntry)}</ul>
+          </>
         )}
       </div>
     </div>
@@ -227,6 +284,25 @@ export function Admin() {
               Delete
             </button>
           </div>
+        </div>
+      </li>
+    );
+  }
+
+  // Renders one access-log line: timestamp · ip · method · path · status · duration.
+  function renderLogEntry(e, i) {
+    const status = parseInt(e.status, 10);
+    const statusColor =
+      status >= 400 ? '#d32f2f' : status >= 200 && status < 300 ? '#2e7d32' : 'inherit';
+    return (
+      <li key={i} className="recent-paste-item">
+        <div className="paste-meta">
+          {e.timestamp}
+          {` · ${e.ip} · ${e.method} `}
+          {e.path}
+          {' · '}
+          <span style={{ color: statusColor, fontWeight: 600 }}>{e.status}</span>
+          {` · ${e.duration}`}
         </div>
       </li>
     );

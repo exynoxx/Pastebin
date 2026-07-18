@@ -16,6 +16,8 @@
 ## nginx re-uses upstream connections cheaply and the workload is tiny.
 
 import std/[net, os, strutils, uri, json]
+from std/posix import Timeval, Time, Suseconds, Socklen, setsockopt,
+    SOL_SOCKET, SO_RCVTIMEO, SO_SNDTIMEO
 import common/templates
 import tmpfile
 
@@ -42,6 +44,7 @@ var
     gHandler: RequestHandler
     gBodySpillThreshold: int
     gMaxBodyBytes: int64
+    gRequestTimeoutMs: int
 
 # Reused across every request a worker serves (each worker handles one connection at a time, so
 # there's no aliasing): a threadvar buffer costs one allocation per thread for the process lifetime
@@ -65,6 +68,7 @@ func reason(code: int): string =
     of 206: "Partial Content"
     of 400: "Bad Request"
     of 404: "Not Found"
+    of 408: "Request Timeout"
     of 413: "Payload Too Large"
     of 416: "Range Not Satisfiable"
     of 429: "Too Many Requests"
@@ -291,25 +295,46 @@ func parseRequestLineAndHeaders(req: Request, headerText: string): bool =
         pos = eol + 2
     true
 
+proc setSocketTimeouts(sock: Socket, timeoutMs: int) =
+    ## Arm SO_RCVTIMEO/SO_SNDTIMEO on the accepted connection: any recv()/send() that makes no
+    ## progress for `timeoutMs` returns <= 0 (the loops below treat that as end-of-connection), so a
+    ## stalled/slowloris client frees its worker instead of pinning it forever. This is the server's
+    ## ONLY request timeout — each worker is one of just `numThreads`, so a few stuck sockets would
+    ## otherwise starve every other client. nginx has its own timeouts; this is the backstop for the
+    ## worker pool (and the sole guard on the direct-to-:8080 path).
+    if timeoutMs <= 0: return
+    var tv = Timeval(tv_sec: Time(timeoutMs div 1000),
+                     tv_usec: Suseconds((timeoutMs mod 1000) * 1000))
+    let fd = sock.getFd()
+    discard setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, addr tv, Socklen(sizeof(tv)))
+    discard setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, addr tv, Socklen(sizeof(tv)))
+
 proc handleConnection(sock: Socket, remote: string) =
     ## Reads exactly one request, dispatches it, cleans up. Never raises.
     var req = Request(socket: sock, remoteAddress: remote)
     var bodyTemp = ""
+    setSocketTimeouts(sock, gRequestTimeoutMs)
     try:
         # --- read the header block (until CRLF CRLF), keeping any body bytes read past it ---
         if gRecvBuf.len < RecvChunk: gRecvBuf.setLen(RecvChunk)
         var pending = ""
         var headerEnd = -1
+        var readTimedOut = false
         while headerEnd < 0:
             let n = sock.recv(addr gRecvBuf[0], RecvChunk)
-            if n <= 0: break
+            if n <= 0:
+                readTimedOut = n < 0   # <0 = recv timeout/error; 0 = peer closed cleanly
+                break
             pending.addBytes(gRecvBuf, n)
             headerEnd = pending.find("\r\n\r\n")
             if pending.len > 64 * 1024 and headerEnd < 0:
                 req.respond(400, $(%*{"error": "Header too large"}))
                 return
         if headerEnd < 0:
-            return # connection closed before a full header block
+            # Nothing (or only a partial header block) arrived. A timeout means a slow/stalled
+            # client — tell it so; a clean close needs no reply.
+            if readTimedOut: req.respond(408, $(%*{"error": "Request timeout"}))
+            return
 
         let headerText = pending[0 ..< headerEnd]
         var leftover = pending[headerEnd + 4 .. ^1]  # first body bytes already received
@@ -346,6 +371,11 @@ proc handleConnection(sock: Socket, remote: string) =
                     discard outF.writeBuffer(addr gRecvBuf[0], n)
                     received += n
                 outF.close()
+                if received < contentLength:
+                    # Body stalled/closed before the promised Content-Length — don't dispatch a
+                    # truncated request; 408 (a stalled slow client is the usual cause behind nginx).
+                    req.respond(408, $(%*{"error": "Request timeout"}))
+                    return
             else:
                 # Small body: read into memory.
                 req.body = leftover
@@ -354,6 +384,9 @@ proc handleConnection(sock: Socket, remote: string) =
                     let n = sock.recv(addr gRecvBuf[0], want)
                     if n <= 0: break
                     req.body.addBytes(gRecvBuf, n)
+                if req.body.len.int64 < contentLength:
+                    req.respond(408, $(%*{"error": "Request timeout"}))
+                    return
 
         gHandler(req)
         if not req.responded:
@@ -375,8 +408,8 @@ proc handleConnection(sock: Socket, remote: string) =
 var gListener: Socket
 
 proc workerLoop() {.thread.} =
-    # gListener/gHandler/gBodySpillThreshold/gMaxBodyBytes are all set once in listenAndServe()
-    # before any worker starts and only read here; accept() is thread-safe across workers on Linux.
+    # gListener/gHandler/gBodySpillThreshold/gMaxBodyBytes/gRequestTimeoutMs are all set once in
+    # listenAndServe() before any worker starts and only read here; accept() is thread-safe on Linux.
     {.cast(gcsafe).}:
         while true:
             var client: Socket
@@ -388,11 +421,12 @@ proc workerLoop() {.thread.} =
             handleConnection(client, address)
 
 proc listenAndServe*(port: int, numThreads: int, bodySpillThreshold: int,
-                     maxBodyBytes: int64, handler: RequestHandler) =
+                     maxBodyBytes: int64, requestTimeoutMs: int, handler: RequestHandler) =
     ## Binds 0.0.0.0:port and runs `numThreads` accept/handle worker threads (blocking).
     gHandler = handler
     gBodySpillThreshold = bodySpillThreshold
     gMaxBodyBytes = maxBodyBytes
+    gRequestTimeoutMs = requestTimeoutMs
 
     # buffered = false is REQUIRED, not an optimisation. std/net's default buffered
     # Socket is built for its buffered read helpers (recvLine etc.); this server does

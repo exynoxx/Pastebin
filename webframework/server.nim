@@ -12,6 +12,7 @@ type
         numThreads*: int
         bodySpillThreshold*: int   ## bodies larger than this stream to a temp file instead of RAM
         maxBodyBytes*: int64       ## hard cap; larger Content-Length is rejected with 413
+        requestTimeoutMs*: int     ## per-socket recv/send idle timeout; a stalled client frees its worker (0 = off)
         networkLog*: bool
 
     ResolveIp* = proc(req: Request): string {.gcsafe.}
@@ -23,7 +24,7 @@ var
 
 # Bodies live at the bottom so the public API reads first; Nim needs them declared before use.
 proc serveRaw(port, numThreads, bodySpillThreshold: int, maxBodyBytes: int64,
-              networkLog: bool, dispatch: RequestHandler)
+              requestTimeoutMs: int, networkLog: bool, dispatch: RequestHandler)
 proc entry(req: Request) {.nimcall, gcsafe.}
 proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.}
 
@@ -31,7 +32,7 @@ proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.}
 
 func defaultConfig*(): ServerConfig =
     ServerConfig(port: 8080, numThreads: 4, bodySpillThreshold: 1 shl 20,
-                 maxBodyBytes: 100'i64 shl 20, networkLog: false)
+                 maxBodyBytes: 100'i64 shl 20, requestTimeoutMs: 30_000, networkLog: false)
 
 func defaultResolveIp*(req: Request): string {.gcsafe.} =
     ## Behind nginx: trust the first `X-Forwarded-For` hop; fall back to the socket peer address.
@@ -61,17 +62,17 @@ proc serve*[E](routes: RouteTable[E], state: E, config = defaultConfig(),
         {.cast(gcsafe).}: gRun(req)
 
     serveRaw(config.port, config.numThreads, config.bodySpillThreshold,
-             config.maxBodyBytes, config.networkLog, onRequest)
+             config.maxBodyBytes, config.requestTimeoutMs, config.networkLog, onRequest)
 
 # ---- private helpers -------------------------------------------------------
 
 proc serveRaw(port, numThreads, bodySpillThreshold: int, maxBodyBytes: int64,
-              networkLog: bool, dispatch: RequestHandler) =
+              requestTimeoutMs: int, networkLog: bool, dispatch: RequestHandler) =
     ## Wire a raw `dispatch` onto the HTTP server and serve (blocking). Set once, before any worker
     ## starts — the single-writer discipline listenAndServe() relies on.
     gDispatch = dispatch
     gNetworkLog = networkLog
-    listenAndServe(port, numThreads, bodySpillThreshold, maxBodyBytes, entry)
+    listenAndServe(port, numThreads, bodySpillThreshold, maxBodyBytes, requestTimeoutMs, entry)
 
 proc entry(req: Request) {.nimcall, gcsafe.} =
     ## The `RequestHandler` wired into the HTTP server: optional access log, then the app's dispatch.

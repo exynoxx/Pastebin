@@ -35,6 +35,7 @@ type
         blobStoragePath*: string       # BLOB_STORAGE_PATH  /data/blobs
         port*: int                     # PORT              8080
         workerThreads*: int            # WORKER_THREADS     tuned below the Pi's cores*10
+        requestTimeoutMs*: int         # REQUEST_TIMEOUT_MS 30000 (recv/send idle timeout; frees a worker from a stalled client)
         networkLog*: bool              # NETWORK_LOG        default true
         accessLogPath*: string         # ACCESS_LOG_PATH        "" => disabled
         accessLogMaxBytes*: int64      # ACCESS_LOG_MAX_BYTES   5 MB (size-based rotation)
@@ -68,6 +69,7 @@ proc loadConfig*(): AppConfig =
     result.blobStoragePath         = getEnv("BLOB_STORAGE_PATH", "/data/blobs")
     result.port                    = getLong("PORT", 8080).int
     result.workerThreads           = getLong("WORKER_THREADS", 8).int
+    result.requestTimeoutMs        = getLong("REQUEST_TIMEOUT_MS", 30_000).int   # recv/send idle timeout
     result.networkLog              = getEnv("NETWORK_LOG", "true").toLowerAscii() != "false"
     result.accessLogPath           = getEnv("ACCESS_LOG_PATH", "")
     result.accessLogMaxBytes       = getLong("ACCESS_LOG_MAX_BYTES", 5_242_880)   # 5 MB

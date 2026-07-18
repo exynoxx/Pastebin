@@ -36,6 +36,7 @@ proc main() =
         numThreads: cfg.workerThreads,
         bodySpillThreshold: cfg.inlinePasteMaxBytes,
         maxBodyBytes: cfg.maxRequestBytes,
+        requestTimeoutMs: cfg.requestTimeoutMs,
         networkLog: cfg.networkLog)
     serve(registerRoutes(), cfg, serverCfg, resolveIp = clientip.resolveClientIp)
 

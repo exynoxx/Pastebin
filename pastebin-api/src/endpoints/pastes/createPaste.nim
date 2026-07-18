@@ -52,9 +52,9 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
     p
 
 proc handleCreatePaste*(ctx: Ctx) =
-    # Bound the body BEFORE it's read into a string and parsed into a node tree — otherwise a
-    # multi-hundred-MB JSON POST (allowed by the 1 GB MAX_REQUEST_BYTES) is fully materialised and
-    # parsed before the maxPasteBytes check in createPasteRecord, blowing the container memory cap.
+    # Bound the body BEFORE it's read into a string and parsed into a node tree — otherwise a large
+    # JSON POST (up to MAX_REQUEST_BYTES, ~51 MB) is fully materialised and parsed before the
+    # maxPasteBytes check in createPasteRecord, blowing the container memory cap.
     # The cap leaves generous headroom over maxPasteBytes for the JSON envelope + string escaping,
     # so a legitimate max-size paste is never rejected here (the exact content check runs later).
     if ctx.req.bodyLen > ctx.cfg.maxPasteBytes * 2 + 65_536:

@@ -57,12 +57,11 @@ source of truth (with defaults and descriptions). The main ones:
 
 | Var | Default | Purpose |
 |---|---|---|
-| `MAX_REQUEST_BYTES` | 1 GB | Max bytes per upload/paste (keep in sync with nginx `client_max_body_size`) |
+| `MAX_REQUEST_BYTES` | ~51 MB | Max bytes per upload/paste (keep in sync with nginx `client_max_body_size`) |
 | `MAX_PASTE_BYTES` | 10 MB | Hard cap on a single paste |
 | `MAX_STORAGE_BYTES_PER_IP` | 100 MB | Total stored bytes per client IP |
-| `RATE_LIMIT_PER_IP_PER_MIN` | 120 | Requests/min per IP |
-| `RATE_LIMIT_UPLOADS_PER_MIN` | 10 | Uploads & paste-creates/min per IP |
-| `RATE_LIMIT_GLOBAL_CONCURRENCY` | 50 | Max concurrent requests before shedding load (503) |
+| `RATE_LIMIT_GLOBAL_CONCURRENCY` | 30 | Max concurrent in-handler requests before shedding (503); mirrors nginx `limit_conn` |
+| `REQUEST_TIMEOUT_MS` | 30000 | Recv/send idle timeout; a stalled client is dropped (408), freeing its worker |
 | `NTFY_TOPIC` | _(unset)_ | ntfy.sh push on new paste/upload; unset ⇒ silent no-op |
 | `ADMIN_TOKEN` | _(unset)_ | Enables the admin API via `X-Admin-Token`; unset ⇒ disabled |
 

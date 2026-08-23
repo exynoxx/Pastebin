@@ -65,7 +65,7 @@ FROM debian:bookworm-slim AS final
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libsqlite3-0 openssl ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
-    mkdir -p /data/blobs /data/db && \
+    mkdir -p /data/blobs /data/db /data/logs && \
     groupadd -g 1654 app && useradd -u 1654 -g 1654 -M -N app && \
     chown -R 1654:1654 /data
 COPY --from=build /out/pastebin /usr/local/bin/pastebin

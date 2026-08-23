@@ -20,7 +20,6 @@ public ──HTTPS──▶ Tailscale Funnel edge ──HTTP──▶ nginx :80 
   sets `X-Real-IP`/`X-Forwarded-For`, applies `security-headers.conf`. Serves **plain HTTP on :80** —
   TLS is terminated upstream by Funnel, so do NOT add an HTTPS redirect (it would loop).
 - **`Taskfile.yml`** — deploy automation (`task --list`; see Deploy below).
-- **`docs/`** — `SECURITY.md`, `PERFORMANCE.md`, `NTFY_NOTIFICATIONS.md`, `visibility-plan.md`.
 - **`rpi-omv-setup.md`** — detailed reference for the physical Pi / OpenMediaVault box.
 
 ## Code conventions
@@ -50,9 +49,8 @@ timestamps instead of .NET `"o"` text, `""` instead of JSON `null` for empty `co
 IDs, `{"id"}`-only create responses). Edit the Nim tree to change runtime behavior. Onion
 structure under `pastebin-api/src/`:
 
-- `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults, incl. the single global
-  concurrency cap (`RATE_LIMIT_GLOBAL_CONCURRENCY`). A couple of never-tuned limits (`pastePreviewChars`,
-  `untitledTitleMaxChars`) are fixed constants, not env vars.
+- `main.nim` — entrypoint/wiring. `config.nim` — env-var limits + defaults. A couple of never-tuned
+  limits (`pastePreviewChars`, `untitledTitleMaxChars`) are fixed constants, not env vars.
 - **`endpoints/routes.nim` — the route map** (verb → path → handler). Start here to find any
   endpoint. One handler per file under `endpoints/{pastes,files,admin}/`: createPaste,
   rawPaste (`/api/pastes/{id}/raw` streams full text), recentPastes, getPaste; uploadFile,
@@ -63,9 +61,9 @@ structure under `pastebin-api/src/`:
   reads; `saveFromString` for inline-overflow, `saveFromFile` for uploads — paste content <256 KB
   stays inline in SQLite, larger → blob), `quota.nim` (per-IP cap `MAX_STORAGE_BYTES_PER_IP`,
   100 MB; usage summed from the DB only), `pastecache.nim` (in-memory LRU paste cache —
-  see below), `ratelimit.nim` (a single global concurrency cap — 503 + `Retry-After` when exceeded),
-  `ntfy.nim`, `timeutil.nim` (Unix epoch-millis timestamps + one-shot legacy-ISO migration),
-  `ids.nim` (8-char base62 public IDs for pastes/files), `types.nim`, `apperrors.nim`.
+  see below), `ntfy.nim`, `timeutil.nim` (Unix epoch-millis timestamps), `ids.nim` (8-char base62
+  public IDs for pastes/files), `types.nim`, `apperrors.nim`, `json.nim` (response bodies via
+  `std/json`'s `%` over the domain records).
 - **`pastecache.nim` — in-memory paste cache (write buffer + LRU read cache).** On create,
   `createPasteRecord` admits the full paste content to RAM and returns the id immediately; a single
   background **persister thread** drains a `Channel` and writes the blob (large) + SQLite row, then
@@ -92,16 +90,17 @@ structure under `pastebin-api/src/`:
   file; Range support), `router.nim` (literal + `{param}`, allocation-free path matching), `context.nim`
   (`Ctx[E]` + response/handler helpers), `middleware.nim` (onion chain), `dispatcher.nim` (per-request
   glue), `routetable.nim` (`RouteTable[E]` registration facade), `server.nim` (`serve` entry),
-  `multipart.nim` (custom parser), plus `macros.nim`/`tmpfile.nim`. Optional per-request `NETLOG`
-  stdout line for IP-chain debugging (disable with `NETWORK_LOG=false`). Rate limiting is deliberately
-  **not** in the framework — it's an app-level `Middleware[AppConfig]` (see `ratelimit.nim`).
+  `multipart.nim` (custom parser). Temp files come from `std/tempfiles`. **There is no app-level
+  concurrency limiter** — each worker thread handles one connection at a time, so max in-flight
+  requests is exactly `WORKER_THREADS`; burst shedding belongs to nginx's `limit_conn` (see Limits
+  below).
 - `pastebin.nimble` — deps: `db_connector`, `zippy` (folder→zip); needs `nim >= 2.0`.
 
 Local dev (no Docker; `nim` is on PATH at `~/.nimble/bin/nim`):
 - Type-check: `cd pastebin-api && nim check --hints:off src/main.nim` (exit 0 = clean).
 - Build: `nim c -o:<out> src/main.nim`.
 - Run e2e: `SQLITE_PATH=<dir>/db.sqlite BLOB_STORAGE_PATH=<dir>/blobs PORT=18080
-  ADMIN_TOKEN=<tok> NETWORK_LOG=false <binary>`, then curl `http://127.0.0.1:$PORT/api/…`.
+  ADMIN_TOKEN=<tok> <binary>`, then curl `http://127.0.0.1:$PORT/api/…`.
   Blob paths (vs inline SQLite) trigger at paste content >256 KB and on any file upload.
 
 ## Deploy
@@ -171,8 +170,8 @@ Compose v2.39.2, OpenMediaVault 7. OMV's web UI was moved off :80 → **:9000** 
 ## Access log
 
 The API writes one plaintext line per request — `timestamp ip method path status durationms` — via `accesslog.nim`, an
-app-level middleware registered as the **outermost** global layer (before `rateLimit` in `routes.nim`),
-so it records every access including shed (503) and 404 responses. Enabled by `ACCESS_LOG_PATH`
+app-level middleware registered as the **outermost** global layer in `routes.nim`, so it records
+every access including 404s. (Requests nginx sheds at the edge never reach it — those are in nginx's log.) Enabled by `ACCESS_LOG_PATH`
 (`""` = disabled); both compose files set it to `/data/logs/access.log`, backed by the `log-data`
 volume (local) or the `${LOG_HOST_PATH}` btrfs bind-mount (prod, `.../pastebin/logs`). Lines are
 buffered in memory and flushed by a background thread every `ACCESS_LOG_FLUSH_MS` (5 s) rather than
@@ -184,6 +183,22 @@ are never renamed. **Retention is an external cron on the Pi** — the app never
 find /srv/dev-disk-by-uuid-<data-uuid>/pastebin/logs -name 'access.log.*' -mtime +14 -delete
 ```
 Only rotated files match `access.log.*`; the active file is untouched.
+
+## Limits: nginx vs the app
+
+nginx and the API each enforce the same three limits, and **nginx wins two of them**, so the
+code-side copies are backstops for a request that bypasses the proxy — which, in the deployed
+topology, nothing does. Know which layer actually fires before tuning either:
+
+| Limit | nginx | API | Who actually fires |
+|---|---|---|---|
+| Concurrency | `limit_conn api_all 30`, `api_write 3` | none — max in-flight == `WORKER_THREADS` (6 prod) | **nginx.** An app-level cap of 30 was deleted: it sat above the worker count, so its 503 branch was unreachable. |
+| Body size | `client_max_body_size 51M` | `MAX_REQUEST_BYTES` ~51 MB | **nginx**, on `Content-Length`, before a byte of body is read. Keep the two in sync anyway. |
+| Idle timeout | `proxy_*_timeout 600s` | `REQUEST_TIMEOUT_MS` 30 s | **the API** — its 30 s is 20× tighter, so nginx's 600 s never expires first. |
+
+Consequence worth remembering: a burst gets shed by nginx with a 503 that **never reaches the API**,
+so it appears in nginx's log and not in `access.log`. Note also that `REQUEST_TIMEOUT_MS` is honoured
+only from the image default — neither compose file forwards it, so setting it in `.env` does nothing.
 
 ## Gotchas
 

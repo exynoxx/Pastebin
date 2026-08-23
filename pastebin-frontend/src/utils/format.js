@@ -11,17 +11,17 @@ export function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-// Coarse relative time from a Unix epoch-millis timestamp, e.g. "just now",
-// "5min ago", "3h ago", "30d ago". Future timestamps (clock skew) clamp to "just now".
+// Coarse relative time from a Unix epoch-millis timestamp, e.g. "now", "5 minutes ago",
+// "3 hours ago", "yesterday". Intl handles the wording, plurals and the "now"/"yesterday"
+// special cases; all we pick is the unit. Future timestamps (clock skew) clamp to "now".
+const RELATIVE = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const UNITS = [['day', 86400], ['hour', 3600], ['minute', 60]];
+
 export function timeAgo(ms) {
   if (ms == null) return '';
-  const secs = Math.floor((Date.now() - ms) / 1000);
-  if (secs < 60) return 'just now';
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}min ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  const secs = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  const [unit, per] = UNITS.find(([, per]) => secs >= per) || ['second', 1];
+  return RELATIVE.format(-Math.floor(secs / per), unit);
 }
 
 // A traffic-light color for a byte size, so large items stand out at a glance:

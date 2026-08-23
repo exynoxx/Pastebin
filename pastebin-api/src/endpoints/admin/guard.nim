@@ -11,7 +11,7 @@
 ## prevent. The lockout (first failure ⇒ immediate cooldown) rate-limits guesses without holding a
 ## thread, and constantTimeEq keeps the comparison itself timing-safe.
 ##
-## A successful auth clears the IP's counter. Mirrors ratelimit.nim's locking model: one
+## A successful auth clears the IP's counter. Same locking model as accesslog.nim: one
 ## process-wide lock guards the state Table, which is shared across all worker threads under ORC.
 ##
 ## `requireAdmin` is a fail-closed upfront guard, not middleware: the check is a pure precondition

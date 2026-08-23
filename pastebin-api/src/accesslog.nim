@@ -19,7 +19,7 @@
 ## than ~2 weeks; the active (unnumbered) file never matches that glob. Empty path => disabled (no-op).
 ##
 ## Under Nim's shared-heap ORC the buffer + file handle are reachable from all worker threads and the
-## flusher thread, so a single process-wide lock guards every access (mirrors ratelimit.nim's gLock).
+## flusher thread, so a single process-wide lock guards every access.
 
 import std/[os, locks, strutils, monotimes, times]
 import config

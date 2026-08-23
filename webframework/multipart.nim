@@ -15,9 +15,9 @@
 ## The scan carries over the last `needle.len - 1` bytes between chunk reads, which is exactly the
 ## amount needed so a delimiter split across two `readBuffer` calls is still found.
 
-import std/[os, strutils, strformat]
+import std/[os, strutils, strformat, tempfiles]
+from std/strbasics import add
 import common/templates
-import tmpfile
 
 type
     MultipartEntry* = object
@@ -70,13 +70,6 @@ proc writeExact(f: File, d: openArray[char], lo, hi: int) =
         if n <= 0:
             raise newException(MultipartError, "failed writing multipart temp file")
         i += n
-
-func appendTo(s: var string, d: openArray[char]) =
-    ## Append an openArray[char] to a string via a single copy.
-    if d.len == 0: return
-    let start = s.len
-    s.setLen(start + d.len)
-    copyMem(addr s[start], unsafeAddr d[0], d.len)
 
 proc copyUntilNeedle(s: Scanner, needle: string, sink: proc(d: openArray[char])): bool =
     ## Stream bytes to `sink` until `needle` is found (the needle is consumed, NOT emitted).
@@ -227,7 +220,7 @@ proc parseMultipartImpl(result: var seq[MultipartEntry], bodyPath, contentTypeHe
         # --- part body (up to the next delimiter) ---
         if pHasFilename:
             entry.isFile = true
-            entry.dataFilePath = uniqueTempPath("pastebin-mp")
+            entry.dataFilePath = genTempPath("pastebin-mp-", ".tmp")
             # Register the entry BEFORE streaming so a raise mid-part (or in a later part) still
             # exposes this temp file to the caller's cleanup — the size is patched in below.
             result.add entry
@@ -267,7 +260,7 @@ proc parseMultipartImpl(result: var seq[MultipartEntry], bodyPath, contentTypeHe
             let sink = proc(d: openArray[char]) =
                 if val.len.int64 + d.len.int64 > MaxFieldValueBytes:
                     raise newException(MultipartError, &"form field '{name}' exceeds maximum size")
-                appendTo(val, d)
+                val.add d
             discard copyUntilNeedle(s, needle, sink)
             # Trim the single trailing "\r" left by a CRLF body (no-op for an LF-only body).
             if val.len > 0 and val[^1] == '\r':

@@ -13,6 +13,8 @@ import axios from './conf';
 
 // Builds a friendly notice from a 429 (Too Many Requests) response. Prefers the server's
 // message and appends a human-readable wait derived from Retry-After / retryAfterSeconds.
+const RETRY_IN = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
+
 function rateLimitMessage(error) {
   const data = error.response?.data || {};
   const seconds =
@@ -20,13 +22,15 @@ function rateLimitMessage(error) {
     Number(error.response?.headers?.['retry-after']) ||
     0;
 
-  let wait = '';
-  if (seconds > 0) {
-    wait =
-      seconds >= 60
-        ? ` Try again in about ${Math.ceil(seconds / 60)} minute${seconds >= 120 ? 's' : ''}.`
-        : ` Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`;
-  }
+  // Intl picks the wording and the plural; we only choose the unit.
+  const wait =
+    seconds > 0
+      ? ` Try again ${
+          seconds >= 60
+            ? RETRY_IN.format(Math.ceil(seconds / 60), 'minute')
+            : RETRY_IN.format(seconds, 'second')
+        }.`
+      : '';
 
   const base =
     data.error ||

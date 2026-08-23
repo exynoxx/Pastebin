@@ -1,12 +1,10 @@
 ## GET /api/pastes/{id} — one paste's metadata + (inline) content.
 
-import std/[json, options]
+import std/options
 import ../routes
 referencing db
 referencing pastecache
-import ../../types, ../../json
-
-serialize(Paste, omit = [blobId])
+import ../../json
 
 proc handleGetPaste*(ctx: Ctx, id: string) =
     let cached = pastecache.getDisplayPaste(id)

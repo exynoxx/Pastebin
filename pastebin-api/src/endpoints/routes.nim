@@ -2,15 +2,15 @@
 ## table `main` hands to the framework's `run`. The generic per-request flow (match → build context →
 ## middleware chain → handler/404) lives in the framework (webframework); here we only supply the
 ## app-specific pieces: the `Ctx[AppConfig]` binding, the route map, and the cross-cutting policy
-## chain (the rate limiter — see ratelimit.nim). (Admin auth isn't composed here — admin handlers
-## call requireAdmin upfront; see endpoints/admin/guard.)
+## chain (the access log). Overload protection is nginx's job, not the app's — see the note in
+## nginx.conf. (Admin auth isn't composed here — admin handlers call requireAdmin upfront; see
+## endpoints/admin/guard.)
 
 import std/strutils
 import webframework/server
 import webframework/context as fctx
 import common/templates
 import ../config
-referencing ratelimit
 referencing accesslog
 
 # Re-export what handlers reach for through this module — httpserver (Request + response helpers),
@@ -40,11 +40,10 @@ import
     pastes/recentPastes, pastes/createPaste, pastes/getPaste, pastes/rawPaste,
     files/uploadFile, files/uploadFolder, files/createPasteFromFile,
     files/getFile, files/deleteFile, files/downloadFile, files/viewFile,
-    admin/listPastes, admin/deletePaste, admin/deleteRecentPastes, admin/listAccessLog
+    admin/listPastes, admin/deletePaste, admin/listAccessLog
 
 func registerRoutes*(): RouteTable[AppConfig] =
-    result.use(accesslog.accessLog())   # outermost: records every access, even those rate-limited (503) or 404
-    result.use(ratelimit.rateLimit())
+    result.use(accesslog.accessLog())   # outermost: records every access, including 404s and nginx-shed retries
     result.get(   "/api/pastes",                       handleRecentPastes)
     result.post(  "/api/pastes",                       handleCreatePaste)
     result.get(   "/api/pastes/{id}",                  handleGetPaste)
@@ -59,6 +58,5 @@ func registerRoutes*(): RouteTable[AppConfig] =
 
     # Admin (X-Admin-Token — each handler calls requireAdmin upfront)
     result.get(   "/api/admin/pastes",                 handleAdminListPastes)
-    result.delete("/api/admin/pastes",                 handleAdminDeleteRecentPastes)  # ?last=N bulk delete
     result.delete("/api/admin/pastes/{id}",            handleAdminDeletePaste)
     result.get(   "/api/admin/access-log",             handleAdminAccessLog)

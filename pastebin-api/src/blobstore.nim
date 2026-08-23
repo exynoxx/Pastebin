@@ -4,7 +4,7 @@
 ## directory small. Writes go to "<final>.tmp" then rename → publish atomically so an aborted
 ## upload never leaves a half-written blob. Copies stream in bounded chunks (flat memory).
 
-import std/[os, sysrand]
+import std/[os, strutils, sysrand]
 import types
 
 var gRoot: string
@@ -13,18 +13,11 @@ proc initBlobStore*(root: string) =
     gRoot = root
     createDir(root)
 
-proc randomHex(byteCount: int): string =
-    ## `byteCount` CSPRNG bytes rendered as lowercase hex (2 chars per byte).
-    let bytes = urandom(byteCount)
-    const hexChars = "0123456789abcdef"
-    result = newStringOfCap(byteCount * 2)
-    for b in bytes:
-        result.add hexChars[int(b shr 4)]
-        result.add hexChars[int(b and 0x0f)]
-
 proc newBlobId*(): BlobId =
-    ## 16 random bytes -> 32 lowercase hex chars.
-    BlobId(randomHex(16))
+    ## 16 CSPRNG bytes -> 32 lowercase hex chars.
+    var buf = newString(16)
+    doAssert urandom(buf.toOpenArrayByte(0, buf.high)), "CSPRNG unavailable"
+    BlobId(buf.toHex.toLowerAscii)
 
 proc pathFor(blobId: BlobId, ensureDir = false): string =
     let s = blobId.string

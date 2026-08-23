@@ -16,21 +16,6 @@ var
     gServer, gTopic, gPublicBase: string
     gEnabled: bool
 
-func formatSize(bytes: int64): string =
-    ## B/KB/.../TB, with one optional decimal ("0.#") for scaled values.
-    const units = ["B", "KB", "MB", "GB", "TB"]
-    var size = bytes.float
-    var unit = 0
-    while size >= 1024 and unit < units.len - 1:
-        size /= 1024
-        unit.inc
-    if unit == 0:
-        return &"{bytes} B"
-    # "0.#": one optional decimal, trailing ".0" dropped.
-    var s = formatFloat(size, ffDecimal, 1)
-    if s.endsWith(".0"): s = s[0 ..< s.len - 2]
-    &"{s} {units[unit]}"
-
 proc worker() {.thread.} =
     # gServer/gTopic/gPublicBase are set once in initNtfy before this thread starts and only
     # read here, so the global-access is safe despite Nim's conservative gcsafe check.
@@ -66,12 +51,12 @@ proc notifyPasteCreated*(p: Paste) =
     returnif: not gEnabled
     gChan.send(NtfyMsg(
         title: &"New paste: {p.title}",
-        message: &"{formatSize(p.size)} · {p.id}",
+        message: &"{p.size.formatSize(prefix = bpColloquial)} · {p.id}",
         click: &"{gPublicBase}/paste/{p.id}"))
 
 proc notifyFileUploaded*(f: StoredFile) =
     returnif: not gEnabled
     gChan.send(NtfyMsg(
         title: &"New upload: {f.originalName}",
-        message: &"{formatSize(f.size)} · {f.id}",
+        message: &"{f.size.formatSize(prefix = bpColloquial)} · {f.id}",
         click: &"{gPublicBase}/files/{f.id}"))

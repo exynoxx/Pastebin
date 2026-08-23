@@ -15,9 +15,6 @@ type
         # --- paste memory cache ---
         cacheMaxBytes*: int64          # CACHE_MAX_BYTES  128 MB (dirty pending + clean LRU combined)
 
-        # --- global concurrency limit (the only framework rate limiter) ---
-        globalConcurrency*: int        # RATE_LIMIT_GLOBAL_CONCURRENCY 30
-
         # --- ntfy ---
         ntfyServerUrl*: string         # NTFY_SERVER_URL   https://ntfy.sh
         ntfyTopic*: string             # NTFY_TOPIC        "" => disabled
@@ -32,7 +29,6 @@ type
         port*: int                     # PORT              8080
         workerThreads*: int            # WORKER_THREADS     tuned below the Pi's cores*10
         requestTimeoutMs*: int         # REQUEST_TIMEOUT_MS 30000 (recv/send idle timeout; frees a worker from a stalled client)
-        networkLog*: bool              # NETWORK_LOG        default true
         accessLogPath*: string         # ACCESS_LOG_PATH        "" => disabled
         accessLogMaxBytes*: int64      # ACCESS_LOG_MAX_BYTES   5 MB (size-based rotation)
         accessLogFlushMs*: int         # ACCESS_LOG_FLUSH_MS    5000 (buffer flush interval)
@@ -53,7 +49,6 @@ proc loadConfig*(): AppConfig =
     result.inlinePasteMaxBytes     = getLong("INLINE_PASTE_MAX_BYTES", 262_144).int
     result.maxStorageBytesPerIp    = getLong("MAX_STORAGE_BYTES_PER_IP", 104_857_600)
     result.maxFileUploadBytes      = getLong("MAX_FILE_UPLOAD_BYTES", 52_428_800)   # 50 MB (single file & folder upload)
-    result.globalConcurrency       = getLong("RATE_LIMIT_GLOBAL_CONCURRENCY", 30).int
     result.ntfyServerUrl           = getEnv("NTFY_SERVER_URL", "https://ntfy.sh")
     result.ntfyTopic               = getEnv("NTFY_TOPIC", "")
     result.publicBaseUrl           = getEnv("PUBLIC_BASE_URL", "https://rpi.deer-hue.ts.net")
@@ -63,7 +58,6 @@ proc loadConfig*(): AppConfig =
     result.port                    = getLong("PORT", 8080).int
     result.workerThreads           = getLong("WORKER_THREADS", 8).int
     result.requestTimeoutMs        = getLong("REQUEST_TIMEOUT_MS", 30_000).int   # recv/send idle timeout
-    result.networkLog              = getEnv("NETWORK_LOG", "true").toLowerAscii() != "false"
     result.accessLogPath           = getEnv("ACCESS_LOG_PATH", "")
     result.accessLogMaxBytes       = getLong("ACCESS_LOG_MAX_BYTES", 5_242_880)   # 5 MB
     result.accessLogFlushMs        = getLong("ACCESS_LOG_FLUSH_MS", 5_000).int    # 5 s

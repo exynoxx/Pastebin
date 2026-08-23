@@ -15,12 +15,12 @@
 ## (`Connection: close`). No keep-alive / pipelining keeps the state machine trivial and correct;
 ## nginx re-uses upstream connections cheaply and the workload is tiny.
 
-import std/[net, os, strutils, uri, json]
+import std/[net, os, strutils, tempfiles, uri, json]
+from std/strbasics import add
 from std/posix import Timeval, Time, Suseconds, Socklen, setsockopt,
     SOL_SOCKET, SO_RCVTIMEO, SO_SNDTIMEO
 from std/httpcore import HttpCode, `$`
 import common/templates
-import tmpfile
 
 type
     Request* = ref object
@@ -54,13 +54,6 @@ var
     gRecvBuf {.threadvar.}: string
     gSendBuf {.threadvar.}: string
 
-func addBytes(dst: var string, src: string, n: int) =
-    ## Append src[0 ..< n] to dst without allocating the `src[0 ..< n]` slice temporary.
-    if n <= 0: return
-    let old = dst.len
-    dst.setLen(old + n)
-    copyMem(addr dst[old], unsafeAddr src[0], n)
-
 # ---- request helpers -------------------------------------------------------
 
 func header*(req: Request, name: string): string =
@@ -86,7 +79,7 @@ proc bodyFile*(req: Request): string =
     ## body wasn't spilled. Sets req.bodyFilePath so the server's cleanup removes it. Used for
     ## streaming multipart parsing.
     if req.bodyFilePath.len == 0:
-        let p = uniqueTempPath("pb-body")
+        let p = genTempPath("pb-body-", ".tmp")
         writeFile(p, req.body)
         req.bodyFilePath = p
         req.body = ""
@@ -311,7 +304,7 @@ proc handleConnection(sock: Socket, remote: string) =
             if n <= 0:
                 readTimedOut = n < 0   # <0 = recv timeout/error; 0 = peer closed cleanly
                 break
-            pending.addBytes(gRecvBuf, n)
+            pending.add gRecvBuf.toOpenArray(0, n - 1)
             headerEnd = pending.find("\r\n\r\n")
             if pending.len > 64 * 1024 and headerEnd < 0:
                 req.respond(400, $(%*{"error": "Header too large"}))
@@ -343,7 +336,7 @@ proc handleConnection(sock: Socket, remote: string) =
         if contentLength > 0:
             if contentLength > gBodySpillThreshold.int64:
                 # Spill to a temp file, streaming from the socket in bounded chunks.
-                bodyTemp = uniqueTempPath("pb-body")
+                bodyTemp = genTempPath("pb-body-", ".tmp")
                 req.bodyFilePath = bodyTemp
                 let outF = open(bodyTemp, fmWrite)
                 var received: int64 = 0
@@ -369,7 +362,7 @@ proc handleConnection(sock: Socket, remote: string) =
                     let want = int(min((contentLength - req.body.len.int64), RecvChunk.int64))
                     let n = sock.recv(addr gRecvBuf[0], want)
                     if n <= 0: break
-                    req.body.addBytes(gRecvBuf, n)
+                    req.body.add gRecvBuf.toOpenArray(0, n - 1)
                 if req.body.len.int64 < contentLength:
                     req.respond(408, $(%*{"error": "Request timeout"}))
                     return

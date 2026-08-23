@@ -6,7 +6,6 @@ import std/strformat
 import config
 import common/templates
 referencing blobstore
-referencing ratelimit
 referencing ntfy
 referencing clientip
 referencing accesslog
@@ -22,7 +21,6 @@ proc main() =
     blobstore.initBlobStore(cfg.blobStoragePath)
     pastecache.initPasteCache(cfg)
     guard.initAdminGuard()
-    ratelimit.initRateLimiter(cfg)
     accesslog.initAccessLog(cfg)
     ntfy.initNtfy(cfg)
 
@@ -36,8 +34,7 @@ proc main() =
         numThreads: cfg.workerThreads,
         bodySpillThreshold: cfg.inlinePasteMaxBytes,
         maxBodyBytes: cfg.maxRequestBytes,
-        requestTimeoutMs: cfg.requestTimeoutMs,
-        networkLog: cfg.networkLog)
+        requestTimeoutMs: cfg.requestTimeoutMs)
     serve(registerRoutes(), cfg, serverCfg, resolveIp = clientip.resolveClientIp)
 
 when isMainModule:

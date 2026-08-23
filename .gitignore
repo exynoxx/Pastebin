@@ -7,8 +7,10 @@ node_modules/
 *.sln
 *.DotSettings.user
 
-# Compiled Nim backend binary (build.sh output)
+# Compiled Nim binaries (`nim c` output — never commit; a 1.4 MB ELF is not source)
 /pastebin-api/pastebin
+/pastebin-api/src/main
+/pastebin-api/tests/test_pastecache
 
 # Local secrets — never commit
 .env

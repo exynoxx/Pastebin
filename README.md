@@ -59,7 +59,7 @@ source of truth (with defaults and descriptions). The main ones:
 |---|---|---|
 | `MAX_REQUEST_BYTES` | ~51 MB | Max bytes per upload/paste (keep in sync with nginx `client_max_body_size`); also the effective per-paste ceiling |
 | `MAX_STORAGE_BYTES_PER_IP` | 100 MB | Total stored bytes per client IP |
-| `RATE_LIMIT_GLOBAL_CONCURRENCY` | 30 | Max concurrent in-handler requests before shedding (503); mirrors nginx `limit_conn` |
+| `WORKER_THREADS` | 8 | HTTP worker threads — also the app's real concurrency ceiling (one connection each). Burst shedding is nginx's `limit_conn`, not the app's |
 | `REQUEST_TIMEOUT_MS` | 30000 | Recv/send idle timeout; a stalled client is dropped (408), freeing its worker |
 | `NTFY_TOPIC` | _(unset)_ | ntfy.sh push on new paste/upload; unset ⇒ silent no-op |
 | `ADMIN_TOKEN` | _(unset)_ | Enables the admin API via `X-Admin-Token`; unset ⇒ disabled |
@@ -75,4 +75,3 @@ compare (see `pastebin-api/src/endpoints/admin/guard.nim`).
 
 - [`CLAUDE.md`](CLAUDE.md) — architecture, deploy internals, and RPi runtime notes.
 - [`rpi-omv-setup.md`](rpi-omv-setup.md) — the physical Pi / OpenMediaVault runbook.
-- [`docs/plans/`](docs/plans/) — design docs / roadmap.

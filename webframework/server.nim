@@ -1,8 +1,6 @@
 ## Umbrella + entry point. Re-exports the whole framework and defines the public API: `serve` —
-## build a `RouteTable[E]`, hand it the app state, and serve (blocking). Everything it's built on
-## (raw per-request dispatch, the optional access log) is private below.
+## build a `RouteTable[E]`, hand it the app state, and serve (blocking).
 
-import std/strutils
 import httpserver, context, router, middleware, dispatcher, routetable
 export httpserver, context, router, middleware, dispatcher, routetable
 
@@ -13,37 +11,18 @@ type
         bodySpillThreshold*: int   ## bodies larger than this stream to a temp file instead of RAM
         maxBodyBytes*: int64       ## hard cap; larger Content-Length is rejected with 413
         requestTimeoutMs*: int     ## per-socket recv/send idle timeout; a stalled client frees its worker (0 = off)
-        networkLog*: bool
 
     ResolveIp* = proc(req: Request): string {.gcsafe.}
-        ## Resolves the client id used for `Ctx.ip` (rate-limit / quota / owner bucket).
-
-var
-    gDispatch: RequestHandler   ## set once in serveRaw(), read on the workers
-    gNetworkLog: bool
+        ## Resolves the client id used for `Ctx.ip` (quota / owner bucket). Required: which hop in
+        ## the proxy chain is the real client is a deployment fact the framework can't guess, and a
+        ## wrong default silently collapses every user into one bucket.
 
 # Bodies live at the bottom so the public API reads first; Nim needs them declared before use.
-proc serveRaw(port, numThreads, bodySpillThreshold: int, maxBodyBytes: int64,
-              requestTimeoutMs: int, networkLog: bool, dispatch: RequestHandler)
-proc entry(req: Request) {.nimcall, gcsafe.}
 proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.}
 
 # ---- public API ------------------------------------------------------------
 
-func defaultConfig*(): ServerConfig =
-    ServerConfig(port: 8080, numThreads: 4, bodySpillThreshold: 1 shl 20,
-                 maxBodyBytes: 100'i64 shl 20, requestTimeoutMs: 30_000, networkLog: false)
-
-func defaultResolveIp*(req: Request): string {.gcsafe.} =
-    ## Behind nginx: trust the first `X-Forwarded-For` hop; fall back to the socket peer address.
-    let xff = req.header("X-Forwarded-For")
-    if xff.len > 0:
-        let comma = xff.find(',')
-        return (if comma >= 0: xff[0 ..< comma] else: xff).strip()
-    req.remoteAddress
-
-proc serve*[E](routes: RouteTable[E], state: E, config = defaultConfig(),
-               resolveIp: ResolveIp = defaultResolveIp) =
+proc serve*[E](routes: RouteTable[E], state: E, config: ServerConfig, resolveIp: ResolveIp) =
     ## Serve `routes` (blocking). `state` is the app structure every handler gets via `Ctx.cfg`.
     ## Captured once into a per-instantiation global closure before workers start, so the nimcall
     ## `onRequest` (which can't close over locals) reaches it and the single-writer rule holds.
@@ -61,26 +40,10 @@ proc serve*[E](routes: RouteTable[E], state: E, config = defaultConfig(),
     proc onRequest(req: Request) {.nimcall, gcsafe.} =
         {.cast(gcsafe).}: gRun(req)
 
-    serveRaw(config.port, config.numThreads, config.bodySpillThreshold,
-             config.maxBodyBytes, config.requestTimeoutMs, config.networkLog, onRequest)
+    listenAndServe(config.port, config.numThreads, config.bodySpillThreshold,
+                   config.maxBodyBytes, config.requestTimeoutMs, onRequest)
 
 # ---- private helpers -------------------------------------------------------
-
-proc serveRaw(port, numThreads, bodySpillThreshold: int, maxBodyBytes: int64,
-              requestTimeoutMs: int, networkLog: bool, dispatch: RequestHandler) =
-    ## Wire a raw `dispatch` onto the HTTP server and serve (blocking). Set once, before any worker
-    ## starts — the single-writer discipline listenAndServe() relies on.
-    gDispatch = dispatch
-    gNetworkLog = networkLog
-    listenAndServe(port, numThreads, bodySpillThreshold, maxBodyBytes, requestTimeoutMs, entry)
-
-proc entry(req: Request) {.nimcall, gcsafe.} =
-    ## The `RequestHandler` wired into the HTTP server: optional access log, then the app's dispatch.
-    {.cast(gcsafe).}:
-        if gNetworkLog:
-            stdout.writeLine("NETLOG " & req.httpMethod & " " & req.path)
-            stdout.flushFile()
-        gDispatch(req)
 
 proc defaultNotFound[E](ctx: Ctx[E]) {.nimcall, gcsafe.} =
     ctx.respondError(404, "Not found")

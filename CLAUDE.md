@@ -60,24 +60,31 @@ structure under `pastebin-api/src/`:
   `blobstore.nim` (blob store, 2-char sharding `ab/ab12…`, atomic temp→final writes, seekable/Range
   reads; `saveFromString` for inline-overflow, `saveFromFile` for uploads — paste content <256 KB
   stays inline in SQLite, larger → blob), `quota.nim` (per-IP cap `MAX_STORAGE_BYTES_PER_IP`,
-  100 MB; usage summed from the DB only), `pastecache.nim` (in-memory LRU paste cache —
-  see below), `ntfy.nim`, `timeutil.nim` (Unix epoch-millis timestamps), `ids.nim` (8-char base62
+  100 MB; usage summed from the DB only), `writequeue.nim` + `pastecache.nim`
+  (async write buffer / LRU read cache — see below), `ntfy.nim`, `timeutil.nim` (Unix epoch-millis timestamps), `ids.nim` (8-char base62
   public IDs for pastes/files), `types.nim`, `apperrors.nim`, `json.nim` (response bodies via
   `std/json`'s `%` over the domain records).
-- **`pastecache.nim` — in-memory paste cache (write buffer + LRU read cache).** On create,
-  `createPasteRecord` admits the full paste content to RAM and returns the id immediately; a single
-  background **persister thread** drains a `Channel` and writes the blob (large) + SQLite row, then
-  flips the entry clean (it lives on as an LRU read-cache entry until evicted). `getPaste`/`rawPaste`
-  serve from the cache first (rawPaste streams from disk once the entry is clean+blob-backed, so Range
-  keeps working); admin `deletePaste` evicts it. The cache is mandatory (no toggle); when a create
-  can't be admitted because the cache is full (over `CACHE_MAX_BYTES`), the create is rejected with
-  **HTTP 429 + `Retry-After`** — there is no synchronous persist-before-respond fallback. Size-bounded
-  by **`CACHE_MAX_BYTES`** (128 MB, dirty pending + clean LRU combined). ⚠️ A paste lives
-  only in RAM between the POST response and the flush (sub-second, steady state), so a hard crash in
-  that window loses it — same accepted trade-off as the access log. The `recent` list stays DB-only, so
-  a brand-new public paste appears there a few seconds late. Concurrency mirrors `accesslog.nim`: one
-  process-wide `Lock`; `--mm:atomicArc` has no cycle collector, so the intrusive LRU list is always
-  unlinked before any bulk drop (`clearEntries`).
+- **`writequeue.nim` — async write buffer; `pastecache.nim` — read cache.** Two separate modules
+  with no knowledge of each other; `createPasteRecord` writes to both (queue first, then cache) and
+  returns the id immediately.
+  - **`writequeue.nim`** owns durability. `enqueue` holds the full content in a pending table and
+    sends the id down a `Channel`; a single background **persister thread** writes the blob (large)
+    + SQLite row, then drops the pending copy. `rawPaste` serves from the pending copy until it is
+    on disk, then from the blob (Range-capable) or the row. Over **`CACHE_MAX_BYTES`** (128 MB) of
+    unwritten content, `enqueue` returns false and the create is rejected with **HTTP 429 +
+    `Retry-After`** — there is no synchronous persist-before-respond fallback. Unwritten content is
+    never dropped to make room (it isn't on disk yet). Admin `deletePaste` calls `cancel`, which
+    also makes the persister roll back a write already in flight.
+  - **`pastecache.nim`** is a plain byte-bounded LRU of *display* Pastes (inline content or an
+    8 KB preview) serving `getPaste`, populated on create and on a DB read. Everything in it is
+    also on (or headed for) disk, so any entry can be evicted at any time — no pinning, no dirty
+    flag, no mutation. Budget is `CACHE_MAX_BYTES div 4`, derived in `main.nim` so there's still
+    one knob.
+  ⚠️ A paste lives only in RAM between the POST response and the write (sub-second, steady
+  state), so a hard crash in that window loses it — same accepted trade-off as the access log. The
+  `recent` list stays DB-only, so a brand-new public paste appears there a few seconds late.
+  Concurrency mirrors `accesslog.nim`: one process-wide `Lock` per module; `--mm:atomicArc` has no
+  cycle collector, so the intrusive LRU list is always unlinked before any bulk drop (`reset`).
 - `clientip.nim` — `resolveClientIp`, the client IP for **rate-limit + quota bucketing**. Uses the
   **first `X-Forwarded-For` entry**: Funnel sets XFF to the real public client (dropping any
   client-supplied XFF, so the leftmost hop isn't spoofable via the public path), then nginx appends

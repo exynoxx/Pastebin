@@ -12,6 +12,7 @@ referencing ntfy
 referencing timeutil
 referencing ids
 referencing pastecache
+referencing writequeue
 
 const
     PastePreviewChars = 8_192      ## chars kept in the stored inline preview of a large paste
@@ -23,7 +24,7 @@ func buildPreview(content: string, previewChars: int): string
 proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: string): Paste =
     ## Shared paste-creation pipeline. Raises PayloadTooLargeError (-> 413) when over the per-IP quota.
     ## Keeps the full content in RAM and returns immediately; a background thread persists it. Raises
-    ## CacheFullError (-> 429) when the cache can't admit the paste (server at capacity).
+    ## CacheFullError (-> 429) when the write queue is at capacity.
     ## Paste content is bounded only by the global request cap (maxRequestBytes), not a per-paste limit.
     let id = ids.newId()
     let ttl = if title.strip().len == 0: deriveTitle(content, UntitledTitleMaxChars)
@@ -45,10 +46,10 @@ proc createPasteRecord*(cfg: AppConfig, title, content, visibilityIn, ownerIp: s
         p.isTruncated = true
         p.blobId = BlobId("")
 
-    # Admit the full content to RAM; the background persister is the only store path now. A failed
-    # admit means the cache is at capacity (all remaining bytes are pinned-dirty) -> shed with 429.
-    if not pastecache.admit(p, content, ownerIp):
+    # A refused enqueue means too much unwritten content is already resident -> shed with 429.
+    if not writequeue.enqueue(p, content, ownerIp):
         raise newException(CacheFullError, "Server is at capacity. Please retry shortly.")
+    pastecache.put(p)   # the read that follows a create then costs no DB round-trip
     ntfy.notifyPasteCreated(p)
     p
 

@@ -7,9 +7,10 @@ referencing pastecache
 import ../../json
 
 proc handleGetPaste*(ctx: Ctx, id: string) =
-    let cached = pastecache.getDisplayPaste(id)
+    let cached = pastecache.get(id)
     if cached.isSome:
         ctx.req.respond(200, pasteJson(cached.get))
         return
     let p = db.selectPaste(id).getOr404(ctx, "Paste not found")
+    pastecache.put(p)
     ctx.req.respond(200, pasteJson(p))

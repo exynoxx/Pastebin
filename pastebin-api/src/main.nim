@@ -10,6 +10,7 @@ referencing ntfy
 referencing clientip
 referencing accesslog
 referencing pastecache
+referencing writequeue
 referencing db
 import webframework/server
 import endpoints/routes, endpoints/admin/guard
@@ -19,7 +20,10 @@ proc main() =
 
     db.initDb(cfg.sqlitePath)
     blobstore.initBlobStore(cfg.blobStoragePath)
-    pastecache.initPasteCache(cfg)
+    writequeue.initWriteQueue(cfg.cacheMaxBytes)
+    # Derived, not its own env var: the read cache holds display shapes only (inline content or an
+    # 8 KB preview), so a quarter of the write budget is plenty.
+    pastecache.initPasteCache(cfg.cacheMaxBytes div 4)
     guard.initAdminGuard()
     accesslog.initAccessLog(cfg)
     ntfy.initNtfy(cfg)

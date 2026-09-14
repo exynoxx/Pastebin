@@ -54,6 +54,7 @@ services:
       - ${DB_HOST_PATH:?set DB_HOST_PATH to a dir on your USB mount in .env}:/data/db
       - ${LOG_HOST_PATH:?set LOG_HOST_PATH to a dir on your data disk in .env}:/data/logs
     user: "${PASTEBIN_UID:-1654}:${PASTEBIN_GID:-1654}"
+    stop_grace_period: 0s
     mem_limit: 250m
     networks:
       - pastebin-network
